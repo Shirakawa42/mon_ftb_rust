@@ -1,38 +1,55 @@
 mod chunk;
 mod cube_infos;
+mod game_material;
 mod items;
 mod world;
-mod game_material;
 
-use bevy::{prelude::*, render::texture::ImageSettings};
+use bevy::{
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    prelude::*,
+    render::texture::ImageSettings,
+};
 use bevy_flycam::PlayerPlugin;
 use bevy_inspector_egui::WorldInspectorPlugin;
-use chunk::Chunk;
 use game_material::GameMaterial;
 
 const WIDTH: f32 = 1920.0;
 const HEIGHT: f32 = 1080.0;
+const CHUNK_PER_FRAME: usize = 8;
 
-fn spawn_chunk(
+fn create_world(
+    materials: ResMut<Assets<GameMaterial>>,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+) {
+    let mut world = world::World::new(materials, asset_server);
+    world.generate_chunks();
+    commands.insert_resource(world);
+}
+
+fn draw_chunks_to_draw(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<GameMaterial>>,
-    asset_server: Res<AssetServer>,
+    world: ResMut<world::World>,
 ) {
-    let chunk = Chunk::new([0, 0, 0]);
-    let mesh = chunk.generate_mesh();
-
-    let material = materials.add(GameMaterial {
-        color: Color::rgb(1.0, 1.0, 1.0),
-        color_texture: asset_server.load("Textures/BlockAtlas.png"),
-    });
-
-    commands.spawn().insert_bundle(MaterialMeshBundle {
-        mesh: meshes.add(mesh),
-        material: material.clone(),
-        transform: Transform::from_xyz(0.0, 0.0, 0.0),
-        ..default()
-    });
+    let mut chunks_to_draw = world.chunks_to_draw.write().unwrap();
+    for _ in 0..CHUNK_PER_FRAME {
+        if chunks_to_draw.len() >= 1 {
+            let pos = chunks_to_draw[0];
+            world
+                .chunks
+                .read()
+                .unwrap()
+                .get(&pos)
+                .unwrap()
+                .write()
+                .unwrap()
+                .draw_mesh(&mut commands, &mut meshes, world.material.clone());
+            chunks_to_draw.remove(0);
+        } else {
+            break;
+        }
+    }
 }
 
 fn main() {
@@ -46,10 +63,13 @@ fn main() {
             resizable: false,
             ..Default::default()
         })
-        .add_startup_system(spawn_chunk)
+        .add_startup_system(create_world)
+        .add_system(draw_chunks_to_draw)
         .add_plugins(DefaultPlugins)
         .add_plugin(MaterialPlugin::<GameMaterial>::default())
         .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(PlayerPlugin)
+        .add_plugin(LogDiagnosticsPlugin::default())
+        .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .run();
 }

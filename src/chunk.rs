@@ -1,4 +1,4 @@
-use crate::{cube_infos::*, items::ITEMS};
+use crate::{cube_infos::*, game_material::GameMaterial, items::ITEMS};
 use bevy::{
     prelude::*,
     render::{mesh::Indices, render_resource::PrimitiveTopology},
@@ -12,14 +12,74 @@ const NORMALIZED: f32 = 1.0 / TEXTURE_ATLAS_SIZE;
 pub struct Chunk {
     pub cubes: [[[u16; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
     pub position: [i32; 3],
+    pub indices: Vec<u32>,
+    pub vertices: Vec<[f32; 3]>,
+    pub normals: Vec<[f32; 3]>,
+    pub uvs: Vec<[f32; 2]>,
 }
 
 impl Chunk {
     pub fn new(position: [i32; 3]) -> Self {
         let mut cubes = [[[2; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
+        let indices = Vec::new();
+        let vertices = Vec::new();
+        let normals = Vec::new();
+        let uvs = Vec::new();
 
         cubes[0][0][0] = 4;
-        Self { cubes, position }
+        Self {
+            cubes,
+            position,
+            indices,
+            vertices,
+            normals,
+            uvs,
+        }
+    }
+
+    pub fn fill_chunk(&mut self) {
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                for z in 0..CHUNK_SIZE {
+                    self.cubes[x][y][z] = 2;
+                }
+            }
+        }
+    }
+
+    pub fn draw_mesh(
+        &mut self,
+        commands: &mut Commands,
+        meshes: &mut ResMut<Assets<Mesh>>,
+        material: Handle<GameMaterial>,
+    ) {
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+        mesh.set_indices(Some(Indices::U32(std::mem::replace(
+            &mut self.indices,
+            Vec::new(),
+        ))));
+        mesh.insert_attribute(
+            Mesh::ATTRIBUTE_POSITION,
+            std::mem::replace(&mut self.vertices, Vec::new()),
+        );
+        mesh.insert_attribute(
+            Mesh::ATTRIBUTE_UV_0,
+            std::mem::replace(&mut self.uvs, Vec::new()),
+        );
+        mesh.insert_attribute(
+            Mesh::ATTRIBUTE_NORMAL,
+            std::mem::replace(&mut self.normals, Vec::new()),
+        );
+        commands.spawn().insert_bundle(MaterialMeshBundle {
+            mesh: meshes.add(mesh),
+            material: material.clone(),
+            transform: Transform::from_xyz(
+                self.position[0] as f32 * CHUNK_SIZE as f32,
+                self.position[1] as f32 * CHUNK_SIZE as f32,
+                self.position[2] as f32 * CHUNK_SIZE as f32,
+            ),
+            ..default()
+        });
     }
 
     fn generate_uv(texture_id: u16) -> Vec<[f32; 2]> {
@@ -51,13 +111,7 @@ impl Chunk {
         return false;
     }
 
-    pub fn generate_mesh(&self) -> Mesh {
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-
-        let mut vertices: Vec<[f32; 3]> = Vec::new();
-        let mut uv: Vec<[f32; 2]> = Vec::new();
-        let mut normals: Vec<[f32; 3]> = Vec::new();
-        let mut indices: Vec<u32> = Vec::new();
+    pub fn generate_mesh(&mut self) {
         let mut vertex_index = 0;
 
         for x in 0..CHUNK_SIZE {
@@ -72,29 +126,29 @@ impl Chunk {
                             y as i32 + CUBE_FACE_CHECKS[j][1],
                             z as i32 + CUBE_FACE_CHECKS[j][2],
                         ) {
-                            vertices.append(&mut Chunk::add_usize_3_to_f32_3(
+                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3(
                                 [x, y, z],
                                 CUBE_VERTICES[CUBE_INDICES[j][0]],
                             ));
-                            vertices.append(&mut Chunk::add_usize_3_to_f32_3(
+                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3(
                                 [x, y, z],
                                 CUBE_VERTICES[CUBE_INDICES[j][1]],
                             ));
-                            vertices.append(&mut Chunk::add_usize_3_to_f32_3(
+                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3(
                                 [x, y, z],
                                 CUBE_VERTICES[CUBE_INDICES[j][2]],
                             ));
-                            vertices.append(&mut Chunk::add_usize_3_to_f32_3(
+                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3(
                                 [x, y, z],
                                 CUBE_VERTICES[CUBE_INDICES[j][3]],
                             ));
 
-                            normals.append(&mut vec![CUBE_NORMALS[j]]);
-                            normals.append(&mut vec![CUBE_NORMALS[j]]);
-                            normals.append(&mut vec![CUBE_NORMALS[j]]);
-                            normals.append(&mut vec![CUBE_NORMALS[j]]);
+                            self.normals.append(&mut vec![CUBE_NORMALS[j]]);
+                            self.normals.append(&mut vec![CUBE_NORMALS[j]]);
+                            self.normals.append(&mut vec![CUBE_NORMALS[j]]);
+                            self.normals.append(&mut vec![CUBE_NORMALS[j]]);
 
-                            uv.append(
+                            self.uvs.append(
                                 &mut Chunk::generate_uv(
                                     ITEMS[self.cubes[x as usize][y as usize][z as usize] as usize]
                                         .textures[j],
@@ -102,7 +156,7 @@ impl Chunk {
                                 .to_vec(),
                             );
 
-                            indices.append(&mut vec![
+                            self.indices.append(&mut vec![
                                 vertex_index as u32,
                                 vertex_index as u32 + 1,
                                 vertex_index as u32 + 2,
@@ -117,10 +171,5 @@ impl Chunk {
                 }
             }
         }
-        mesh.set_indices(Some(Indices::U32(indices)));
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-        return mesh;
     }
 }
