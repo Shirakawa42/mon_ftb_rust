@@ -17,34 +17,18 @@ const WIDTH: f32 = 1920.0;
 const HEIGHT: f32 = 1080.0;
 const CHUNK_PER_FRAME: usize = 8;
 
-fn create_world(
-    materials: ResMut<Assets<GameMaterial>>,
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
-) {
+fn create_world(materials: ResMut<Assets<GameMaterial>>, asset_server: Res<AssetServer>, mut commands: Commands) {
     let mut world = world::World::new(materials, asset_server);
-    world.generate_chunks();
+    world.create_and_fill_chunks();
     commands.insert_resource(world);
 }
 
-fn draw_chunks_to_draw(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    world: ResMut<world::World>,
-) {
+fn draw_chunks_to_draw(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, world: ResMut<world::World>) {
     let mut chunks_to_draw = world.chunks_to_draw.write().unwrap();
     for _ in 0..CHUNK_PER_FRAME {
         if chunks_to_draw.len() >= 1 {
             let pos = chunks_to_draw[0];
-            world
-                .chunks
-                .read()
-                .unwrap()
-                .get(&pos)
-                .unwrap()
-                .write()
-                .unwrap()
-                .draw_mesh(&mut commands, &mut meshes, world.material.clone());
+            world.chunks.read().unwrap().get(&pos).unwrap().write().unwrap().draw_mesh(&mut commands, &mut meshes, world.material.clone());
             chunks_to_draw.remove(0);
         } else {
             break;

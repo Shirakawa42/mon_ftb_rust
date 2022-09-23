@@ -16,6 +16,7 @@ pub struct Chunk {
     pub vertices: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub uvs: Vec<[f32; 2]>,
+    pub filled: bool,
 }
 
 impl Chunk {
@@ -25,6 +26,7 @@ impl Chunk {
         let vertices = Vec::new();
         let normals = Vec::new();
         let uvs = Vec::new();
+        let filled = false;
 
         cubes[0][0][0] = 4;
         Self {
@@ -34,6 +36,7 @@ impl Chunk {
             vertices,
             normals,
             uvs,
+            filled,
         }
     }
 
@@ -45,31 +48,15 @@ impl Chunk {
                 }
             }
         }
+        self.filled = true;
     }
 
-    pub fn draw_mesh(
-        &mut self,
-        commands: &mut Commands,
-        meshes: &mut ResMut<Assets<Mesh>>,
-        material: Handle<GameMaterial>,
-    ) {
+    pub fn draw_mesh(&mut self, commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, material: Handle<GameMaterial>) {
         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-        mesh.set_indices(Some(Indices::U32(std::mem::replace(
-            &mut self.indices,
-            Vec::new(),
-        ))));
-        mesh.insert_attribute(
-            Mesh::ATTRIBUTE_POSITION,
-            std::mem::replace(&mut self.vertices, Vec::new()),
-        );
-        mesh.insert_attribute(
-            Mesh::ATTRIBUTE_UV_0,
-            std::mem::replace(&mut self.uvs, Vec::new()),
-        );
-        mesh.insert_attribute(
-            Mesh::ATTRIBUTE_NORMAL,
-            std::mem::replace(&mut self.normals, Vec::new()),
-        );
+        mesh.set_indices(Some(Indices::U32(std::mem::replace(&mut self.indices, Vec::new()))));
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, std::mem::replace(&mut self.vertices, Vec::new()));
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, std::mem::replace(&mut self.uvs, Vec::new()));
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, std::mem::replace(&mut self.normals, Vec::new()));
         commands.spawn().insert_bundle(MaterialMeshBundle {
             mesh: meshes.add(mesh),
             material: material.clone(),
@@ -99,10 +86,7 @@ impl Chunk {
     }
 
     fn check_side(&self, x: i32, y: i32, z: i32) -> bool {
-        if (x < 0 || x >= CHUNK_SIZE as i32)
-            || (y < 0 || y >= CHUNK_SIZE as i32)
-            || (z < 0 || z >= CHUNK_SIZE as i32)
-        {
+        if (x < 0 || x >= CHUNK_SIZE as i32) || (y < 0 || y >= CHUNK_SIZE as i32) || (z < 0 || z >= CHUNK_SIZE as i32) {
             return true;
         }
         if ITEMS[self.cubes[x as usize][y as usize][z as usize] as usize].is_opaque == false {
@@ -121,40 +105,18 @@ impl Chunk {
                         continue;
                     }
                     for j in 0..6 {
-                        if self.check_side(
-                            x as i32 + CUBE_FACE_CHECKS[j][0],
-                            y as i32 + CUBE_FACE_CHECKS[j][1],
-                            z as i32 + CUBE_FACE_CHECKS[j][2],
-                        ) {
-                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3(
-                                [x, y, z],
-                                CUBE_VERTICES[CUBE_INDICES[j][0]],
-                            ));
-                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3(
-                                [x, y, z],
-                                CUBE_VERTICES[CUBE_INDICES[j][1]],
-                            ));
-                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3(
-                                [x, y, z],
-                                CUBE_VERTICES[CUBE_INDICES[j][2]],
-                            ));
-                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3(
-                                [x, y, z],
-                                CUBE_VERTICES[CUBE_INDICES[j][3]],
-                            ));
+                        if self.check_side(x as i32 + CUBE_FACE_CHECKS[j][0], y as i32 + CUBE_FACE_CHECKS[j][1], z as i32 + CUBE_FACE_CHECKS[j][2]) {
+                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3([x, y, z], CUBE_VERTICES[CUBE_INDICES[j][0]]));
+                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3([x, y, z], CUBE_VERTICES[CUBE_INDICES[j][1]]));
+                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3([x, y, z], CUBE_VERTICES[CUBE_INDICES[j][2]]));
+                            self.vertices.append(&mut Chunk::add_usize_3_to_f32_3([x, y, z], CUBE_VERTICES[CUBE_INDICES[j][3]]));
 
                             self.normals.append(&mut vec![CUBE_NORMALS[j]]);
                             self.normals.append(&mut vec![CUBE_NORMALS[j]]);
                             self.normals.append(&mut vec![CUBE_NORMALS[j]]);
                             self.normals.append(&mut vec![CUBE_NORMALS[j]]);
 
-                            self.uvs.append(
-                                &mut Chunk::generate_uv(
-                                    ITEMS[self.cubes[x as usize][y as usize][z as usize] as usize]
-                                        .textures[j],
-                                )
-                                .to_vec(),
-                            );
+                            self.uvs.append(&mut Chunk::generate_uv(ITEMS[self.cubes[x as usize][y as usize][z as usize] as usize].textures[j]).to_vec());
 
                             self.indices.append(&mut vec![
                                 vertex_index as u32,
