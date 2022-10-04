@@ -1,6 +1,6 @@
 use noise::{NoiseFn, Perlin};
 
-use crate::items::Items;
+use crate::{chunk::Cube, items::Items};
 
 const SEED: u32 = 0;
 
@@ -36,10 +36,10 @@ impl ChunkFilling {
         return Items::Stone as u16;
     }
 
-    pub fn fill_block(&self, gx: f64, gy: f64, gz: f64) -> u16 {        
+    pub fn fill_block(&self, gx: f64, gy: f64, gz: f64) -> Cube {
         if gy <= 0.0 {
-            return self.fill_caverns(gx, gy, gz);
+            return Cube { id: self.fill_caverns(gx, gy, gz) };
         }
-        return self.fill_surface(gx, gy, gz);
+        return Cube { id: self.fill_surface(gx, gy, gz) };
     }
 }

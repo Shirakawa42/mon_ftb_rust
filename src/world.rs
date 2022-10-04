@@ -38,9 +38,9 @@ impl World {
 
     // called each time player change chunk
     pub fn create_and_fill_chunks(&mut self) {
-        for x in -4..4 {
-            for y in -4..4 {
-                for z in -4..4 {
+        for x in -5..5 {
+            for y in -5..5 {
+                for z in -5..5 {
                     let pos = [x, y, z];
 
                     if self.chunks.read().unwrap().contains_key(&pos) {

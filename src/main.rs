@@ -1,14 +1,14 @@
 mod chunk;
-mod cube_infos;
 mod game_material;
 mod items;
 mod world;
 mod chunk_filling;
+mod greedy_meshing_inits;
 
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
-    render::texture::ImageSettings,
+    render::texture::ImageSettings, window::PresentMode,
 };
 use bevy_flycam::PlayerPlugin;
 use bevy_inspector_egui::WorldInspectorPlugin;
@@ -46,6 +46,7 @@ fn main() {
             height: HEIGHT,
             title: "FTB".to_string(),
             resizable: false,
+            present_mode: PresentMode::Immediate,
             ..Default::default()
         })
         .insert_resource(bevy::render::view::Msaa { samples: 1 })
