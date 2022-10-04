@@ -36,6 +36,15 @@ pub const ITEMS: [Item; 5] = [
     },
 ];
 
+#[allow(dead_code)]
+pub enum Items {
+    Air,
+    Dirt,
+    Grass,
+    Stone,
+    Glass,
+}
+
 pub struct Item {
     pub name: &'static str,
     pub id: u16,

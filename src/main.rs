@@ -3,6 +3,7 @@ mod cube_infos;
 mod game_material;
 mod items;
 mod world;
+mod chunk_filling;
 
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
@@ -47,6 +48,7 @@ fn main() {
             resizable: false,
             ..Default::default()
         })
+        .insert_resource(bevy::render::view::Msaa { samples: 1 })
         .add_startup_system(create_world)
         .add_system(draw_chunks_to_draw)
         .add_plugins(DefaultPlugins)

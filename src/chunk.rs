@@ -1,14 +1,14 @@
-use crate::{cube_infos::*, game_material::GameMaterial, items::ITEMS};
+use crate::{chunk_filling, cube_infos::*, game_material::GameMaterial, items::ITEMS};
 use bevy::{
     prelude::*,
     render::{mesh::Indices, render_resource::PrimitiveTopology},
 };
-const CHUNK_SIZE: usize = 32;
+const CHUNK_SIZE: usize = 34;
+const REAL_CHUNK_SIZE: usize = CHUNK_SIZE - 2;
 const TEXTURE_ATLAS_SIZE: f32 = 16.0;
 const NORMALIZED: f32 = 1.0 / TEXTURE_ATLAS_SIZE;
 
-#[derive(Reflect, Component, Default)]
-#[reflect(Component)]
+#[derive(Component)]
 pub struct Chunk {
     pub cubes: [[[u16; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
     pub position: [i32; 3],
@@ -21,14 +21,13 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn new(position: [i32; 3]) -> Self {
-        let mut cubes = [[[2; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
+        let cubes = [[[2; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
         let indices = Vec::new();
         let vertices = Vec::new();
         let normals = Vec::new();
         let uvs = Vec::new();
         let filled = false;
 
-        cubes[0][0][0] = 4;
         Self {
             cubes,
             position,
@@ -40,11 +39,15 @@ impl Chunk {
         }
     }
 
-    pub fn fill_chunk(&mut self) {
+    pub fn fill_chunk(&mut self, chunk_filling: &chunk_filling::ChunkFilling) {
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
                 for z in 0..CHUNK_SIZE {
-                    self.cubes[x][y][z] = 2;
+                    self.cubes[x][y][z] = chunk_filling.fill_block(
+                        (x as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * self.position[0]) as f64,
+                        (y as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * self.position[1]) as f64,
+                        (z as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * self.position[2]) as f64,
+                    );
                 }
             }
         }
@@ -61,9 +64,9 @@ impl Chunk {
             mesh: meshes.add(mesh),
             material: material.clone(),
             transform: Transform::from_xyz(
-                self.position[0] as f32 * CHUNK_SIZE as f32,
-                self.position[1] as f32 * CHUNK_SIZE as f32,
-                self.position[2] as f32 * CHUNK_SIZE as f32,
+                self.position[0] as f32 * REAL_CHUNK_SIZE as f32,
+                self.position[1] as f32 * REAL_CHUNK_SIZE as f32,
+                self.position[2] as f32 * REAL_CHUNK_SIZE as f32,
             ),
             ..default()
         });
@@ -86,9 +89,6 @@ impl Chunk {
     }
 
     fn check_side(&self, x: i32, y: i32, z: i32) -> bool {
-        if (x < 0 || x >= CHUNK_SIZE as i32) || (y < 0 || y >= CHUNK_SIZE as i32) || (z < 0 || z >= CHUNK_SIZE as i32) {
-            return true;
-        }
         if ITEMS[self.cubes[x as usize][y as usize][z as usize] as usize].is_opaque == false {
             return true;
         }
@@ -98,9 +98,9 @@ impl Chunk {
     pub fn generate_mesh(&mut self) {
         let mut vertex_index = 0;
 
-        for x in 0..CHUNK_SIZE {
-            for y in 0..CHUNK_SIZE {
-                for z in 0..CHUNK_SIZE {
+        for x in 1..CHUNK_SIZE - 1 {
+            for y in 1..CHUNK_SIZE - 1 {
+                for z in 1..CHUNK_SIZE - 1 {
                     if self.cubes[x][y][z] == 0 {
                         continue;
                     }
