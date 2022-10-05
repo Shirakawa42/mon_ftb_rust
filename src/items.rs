@@ -1,3 +1,11 @@
+//texture order:
+//  none
+//  bottom
+//  none
+//  none
+//  top
+//  none
+
 pub const ITEMS: [Item; 5] = [
     Item {
         name: "Air",
@@ -18,7 +26,7 @@ pub const ITEMS: [Item; 5] = [
         id: 2,
         is_opaque: true,
         is_solid: true,
-        textures: [2, 2, 7, 1, 2, 2],
+        textures: [2, 1, 2, 2, 7, 2],
     },
     Item {
         name: "Stone",
