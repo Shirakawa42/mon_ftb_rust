@@ -1,17 +1,21 @@
+use std::sync::{Arc, RwLock};
+
+use bevy::utils::HashMap;
 use noise::{NoiseFn, Perlin};
 
-use crate::{chunk::Cube, items::Items};
+use crate::{chunk::{Cube, Chunk}, items::Items};
 
 const SEED: u32 = 0;
 
 #[derive(Clone)]
 pub struct ChunkFilling {
     pub noise: Perlin,
+    pub chunks: Arc<RwLock<HashMap<[i32; 3], Arc<RwLock<Chunk>>>>>,
 }
 
 impl ChunkFilling {
-    pub fn new() -> Self {
-        Self { noise: Perlin::new(SEED) }
+    pub fn new(chunks: Arc<RwLock<HashMap<[i32; 3], Arc<RwLock<Chunk>>>>>) -> Self {
+        Self { noise: Perlin::new(SEED), chunks }
     }
 
     fn fill_surface(&self, gx: f64, gy: f64, gz: f64) -> u16 {

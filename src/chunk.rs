@@ -1,15 +1,19 @@
-use crate::{chunk_filling, game_material::GameMaterial, items::ITEMS};
+use crate::{chunk_filling, game_material::GameMaterial, items::ITEMS, structures::Modification};
 use bevy::{
     prelude::*,
-    render::{mesh::{Indices, MeshVertexAttribute}, render_resource::{PrimitiveTopology, VertexFormat}},
+    render::{
+        mesh::{Indices, MeshVertexAttribute},
+        render_resource::{PrimitiveTopology, VertexFormat},
+    },
 };
 use block_mesh::ndshape::{ConstShape, ConstShape3u32};
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, RIGHT_HANDED_Y_UP_CONFIG};
-const CHUNK_SIZE: u32 = 34;
-const REAL_CHUNK_SIZE: u32 = CHUNK_SIZE - 2;
+
+pub const CHUNK_SIZE: u32 = 34;
+pub const REAL_CHUNK_SIZE: u32 = CHUNK_SIZE - 2;
 pub const ATTRIBUTE_LAYER: MeshVertexAttribute = MeshVertexAttribute::new("Layer", 988540917, VertexFormat::Sint32);
 
-type ChunkShape = ConstShape3u32<CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE>;
+pub type ChunkShape = ConstShape3u32<CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE>;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Cube {
@@ -25,7 +29,9 @@ pub struct Chunk {
     pub normals: Vec<[f32; 3]>,
     pub uvs: Vec<[f32; 2]>,
     pub layers: Vec<i32>,
+    pub modifications: Vec<Modification>,
     pub filled: bool,
+    pub drawn: bool,
 }
 
 impl Chunk {
@@ -36,7 +42,7 @@ impl Chunk {
         let normals = Vec::new();
         let uvs = Vec::new();
         let layers = Vec::new();
-        let filled = false;
+        let modifications = Vec::new();
 
         Self {
             cubes,
@@ -46,7 +52,9 @@ impl Chunk {
             normals,
             uvs,
             layers,
-            filled,
+            modifications,
+            filled: false,
+            drawn: false,
         }
     }
 
@@ -108,7 +116,15 @@ impl Chunk {
         }
     }
 
-    pub fn generate_mesh(&mut self) {
+    pub fn update_mesh(&mut self) {
+        while self.modifications.len() > 0 {
+            if self.modifications[0].force || self.cubes[self.modifications[0].position].id == 0 {
+                self.cubes[self.modifications[0].position].id = self.modifications[0].id;
+            }
+            self.modifications.remove(0);
+        }
+
         self.greedy_meshing();
+        self.drawn = true;
     }
 }

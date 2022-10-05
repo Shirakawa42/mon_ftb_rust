@@ -4,6 +4,7 @@ mod game_material;
 mod greedy_meshing_inits;
 mod items;
 mod world;
+mod structures;
 
 use bevy::{
     asset::LoadState,
@@ -74,6 +75,10 @@ fn draw_chunks_to_draw(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>,
     }
 }
 
+fn update_chunks_to_update(mut world: ResMut<world::World>) {
+    world.update_chunks_to_update();
+}
+
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::BLACK))
@@ -89,6 +94,7 @@ fn main() {
         .add_startup_system(setup)
         .add_system(create_material)
         .add_system(draw_chunks_to_draw)
+        .add_system(update_chunks_to_update)
         .add_plugins(DefaultPlugins)
         .add_plugin(MaterialPlugin::<GameMaterial>::default())
         .add_plugin(WorldInspectorPlugin::new())
