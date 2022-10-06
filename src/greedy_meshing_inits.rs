@@ -1,11 +1,13 @@
-use block_mesh::{Voxel, VoxelVisibility, MergeVoxel};
+use block_mesh::{MergeVoxel, Voxel, VoxelVisibility};
 
 use crate::{chunk::Cube, items};
 
 impl Voxel for Cube {
     fn get_visibility(&self) -> VoxelVisibility {
-        if items::ITEMS[self.id as usize].is_opaque == false {
+        if self.id == 0 {
             VoxelVisibility::Empty
+        } else if items::ITEMS[self.id as usize].is_transparent == true {
+            VoxelVisibility::Translucent
         } else {
             VoxelVisibility::Opaque
         }

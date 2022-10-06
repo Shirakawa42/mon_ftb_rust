@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 use crate::{chunk_filling, game_material::GameMaterial, items::ITEMS, structures::Modification};
 use bevy::{
     prelude::*,
@@ -5,9 +7,11 @@ use bevy::{
         mesh::{Indices, MeshVertexAttribute},
         render_resource::{PrimitiveTopology, VertexFormat},
     },
+    utils::{HashMap, HashSet},
 };
 use block_mesh::ndshape::{ConstShape, ConstShape3u32};
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, RIGHT_HANDED_Y_UP_CONFIG};
+use linked_hash_set::LinkedHashSet;
 
 pub const CHUNK_SIZE: u32 = 34;
 pub const REAL_CHUNK_SIZE: u32 = CHUNK_SIZE - 2;
@@ -22,16 +26,18 @@ pub struct Cube {
 
 #[derive(Component)]
 pub struct Chunk {
-    pub cubes: [Cube; (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as usize],
+    cubes: [Cube; (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as usize],
     pub position: [i32; 3],
-    pub indices: Vec<u32>,
-    pub vertices: Vec<[f32; 3]>,
-    pub normals: Vec<[f32; 3]>,
-    pub uvs: Vec<[f32; 2]>,
-    pub layers: Vec<i32>,
-    pub modifications: Vec<Modification>,
+    indices: Vec<u32>,
+    vertices: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
+    uvs: Vec<[f32; 2]>,
+    layers: Vec<i32>,
+    pub modifications: RwLock<Vec<Modification>>,
+    pub other_chunks_modifications: RwLock<Vec<([i32; 3], Modification)>>,
     pub filled: bool,
     pub drawn: bool,
+    gameobject: Option<Entity>,
 }
 
 impl Chunk {
@@ -42,7 +48,9 @@ impl Chunk {
         let normals = Vec::new();
         let uvs = Vec::new();
         let layers = Vec::new();
-        let modifications = Vec::new();
+        let modifications = RwLock::new(Vec::new());
+        let other_chunks_modifications = RwLock::new(Vec::new());
+        let gameobject = None;
 
         Self {
             cubes,
@@ -53,8 +61,29 @@ impl Chunk {
             uvs,
             layers,
             modifications,
+            other_chunks_modifications,
             filled: false,
             drawn: false,
+            gameobject,
+        }
+    }
+
+    pub fn modify_other_chunks(&self, chunks: Arc<RwLock<HashMap<[i32; 3], Arc<RwLock<Chunk>>>>>, chunks_to_update: Arc<RwLock<LinkedHashSet<[i32; 3]>>>) {
+        let mut modified_chunks: HashSet<[i32; 3]> = HashSet::new();
+
+        while self.other_chunks_modifications.read().unwrap().len() > 0 {
+            let (chunk_position, modification) = self.other_chunks_modifications.write().unwrap().pop().unwrap();
+            if !chunks.read().unwrap().contains_key(&chunk_position) {
+                chunks.write().unwrap().insert(chunk_position, Arc::new(RwLock::new(Chunk::new(chunk_position))));
+            }
+            let chunk = chunks.read().unwrap().get(&chunk_position).unwrap().clone();
+            chunk.read().unwrap().modifications.write().unwrap().push(modification);
+            modified_chunks.insert(chunk_position);
+        }
+        for chunk_position in modified_chunks {
+            if chunks.read().unwrap().get(&chunk_position).unwrap().read().unwrap().drawn {
+                chunks_to_update.write().unwrap().insert_if_absent(chunk_position);
+            }
         }
     }
 
@@ -65,6 +94,7 @@ impl Chunk {
                 (x as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * self.position[0]) as f64,
                 (y as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * self.position[1]) as f64,
                 (z as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * self.position[2]) as f64,
+                self,
             );
         }
         self.filled = true;
@@ -78,7 +108,10 @@ impl Chunk {
             mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, std::mem::replace(&mut self.uvs, Vec::new()));
             mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, std::mem::replace(&mut self.normals, Vec::new()));
             mesh.insert_attribute(ATTRIBUTE_LAYER, std::mem::replace(&mut self.layers, Vec::new()));
-            commands.spawn().insert_bundle(MaterialMeshBundle {
+            if self.gameobject != None {
+                commands.entity(self.gameobject.unwrap()).despawn();
+            }
+            let spawned = commands.spawn_bundle(MaterialMeshBundle {
                 mesh: meshes.add(mesh),
                 material: material.clone(),
                 transform: Transform::from_xyz(
@@ -88,6 +121,7 @@ impl Chunk {
                 ),
                 ..default()
             });
+            self.gameobject = Some(spawned.id());
         }
     }
 
@@ -117,11 +151,11 @@ impl Chunk {
     }
 
     pub fn update_mesh(&mut self) {
-        while self.modifications.len() > 0 {
-            if self.modifications[0].force || self.cubes[self.modifications[0].position].id == 0 {
-                self.cubes[self.modifications[0].position].id = self.modifications[0].id;
+        while self.modifications.read().unwrap().len() > 0 {
+            if self.modifications.read().unwrap()[0].force || self.cubes[self.modifications.read().unwrap()[0].position].id == 0 {
+                self.cubes[self.modifications.read().unwrap()[0].position].id = self.modifications.read().unwrap()[0].id;
             }
-            self.modifications.remove(0);
+            self.modifications.write().unwrap().remove(0);
         }
 
         self.greedy_meshing();

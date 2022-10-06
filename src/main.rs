@@ -15,6 +15,7 @@ use bevy::{
         texture::ImageSettings,
     },
     window::PresentMode,
+    input::{keyboard::KeyboardInput, ButtonState},
 };
 use bevy_flycam::PlayerPlugin;
 use bevy_inspector_egui::WorldInspectorPlugin;
@@ -66,9 +67,8 @@ fn draw_chunks_to_draw(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>,
     let mut chunks_to_draw = world.chunks_to_draw.write().unwrap();
     for _ in 0..CHUNK_PER_FRAME {
         if chunks_to_draw.len() >= 1 {
-            let pos = chunks_to_draw[0];
+            let pos = chunks_to_draw.pop_front().unwrap();
             world.chunks.read().unwrap().get(&pos).unwrap().write().unwrap().draw_mesh(&mut commands, &mut meshes, world.material.clone());
-            chunks_to_draw.remove(0);
         } else {
             break;
         }
@@ -77,6 +77,17 @@ fn draw_chunks_to_draw(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>,
 
 fn update_chunks_to_update(mut world: ResMut<world::World>) {
     world.update_chunks_to_update();
+}
+
+fn force_update_all_chunks(world: ResMut<world::World>, mut keys: EventReader<KeyboardInput>) {
+    for key in keys.iter() {
+        if key.key_code == Some(KeyCode::F) && key.state == ButtonState::Pressed {
+            println!("updating");
+            world.chunks.write().unwrap().iter_mut().for_each(|(_, chunk)| {
+                world.chunks_to_update.write().unwrap().insert(chunk.read().unwrap().position);
+            });
+        }
+    }
 }
 
 fn main() {
@@ -95,6 +106,7 @@ fn main() {
         .add_system(create_material)
         .add_system(draw_chunks_to_draw)
         .add_system(update_chunks_to_update)
+        .add_system(force_update_all_chunks)
         .add_plugins(DefaultPlugins)
         .add_plugin(MaterialPlugin::<GameMaterial>::default())
         .add_plugin(WorldInspectorPlugin::new())
