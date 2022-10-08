@@ -971,8 +971,6 @@ checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
 [[package]]
 name = "block-mesh"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c0345520b5aa77d7d154bd578a18e7a974350931b5f41f641a7844e951b978f"
 dependencies = [
  "ilattice",
  "ndcopy",
@@ -2446,6 +2444,7 @@ dependencies = [
  "bevy_flycam",
  "block-mesh",
  "building_blocks_mesh",
+ "linked-hash-map",
  "linked_hash_set",
  "noise",
  "rayon",

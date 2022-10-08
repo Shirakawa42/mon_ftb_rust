@@ -15,9 +15,14 @@ impl Voxel for Cube {
 }
 
 impl MergeVoxel for Cube {
-    type MergeValue = Self;
+    type MergeValue = u16;
+    type MergeValueFacingNeighbour = u8;
 
     fn merge_value(&self) -> Self::MergeValue {
-        *self
+        self.id
+    }
+
+    fn merge_value_facing_neighbour(&self) -> Self::MergeValueFacingNeighbour {
+        self.light_level
     }
 }

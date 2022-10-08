@@ -1,18 +1,20 @@
-//texture order:
-//  none
-//  bottom
-//  none
-//  none
-//  top
-//  none
+pub const FACES: [[i8; 3]; 6] = [
+    [-1, 0, 0], // front
+    [0, -1, 0], // bottom
+    [0, 0, -1], // right
+    [1, 0, 0],  // back
+    [0, 1, 0],  // top
+    [0, 0, 1],  // left
+];
 
-pub const ITEMS: [Item; 7] = [
+pub const ITEMS: [Item; 8] = [
     Item {
         name: "Air",
         id: 0,
         is_transparent: true,
         is_solid: false,
         textures: [0, 0, 0, 0, 0, 0],
+        light_multiplier: 1.0,
     },
     Item {
         name: "Dirt",
@@ -20,6 +22,7 @@ pub const ITEMS: [Item; 7] = [
         is_transparent: false,
         is_solid: true,
         textures: [1, 1, 1, 1, 1, 1],
+        light_multiplier: 0.0,
     },
     Item {
         name: "Grass",
@@ -27,6 +30,7 @@ pub const ITEMS: [Item; 7] = [
         is_transparent: false,
         is_solid: true,
         textures: [2, 1, 2, 2, 7, 2],
+        light_multiplier: 0.0,
     },
     Item {
         name: "Stone",
@@ -34,6 +38,7 @@ pub const ITEMS: [Item; 7] = [
         is_transparent: false,
         is_solid: true,
         textures: [0, 0, 0, 0, 0, 0],
+        light_multiplier: 0.0,
     },
     Item {
         name: "Glass",
@@ -41,6 +46,7 @@ pub const ITEMS: [Item; 7] = [
         is_transparent: true,
         is_solid: true,
         textures: [3, 3, 3, 3, 3, 3],
+        light_multiplier: 0.9,
     },
     Item {
         name: "Wood",
@@ -48,6 +54,7 @@ pub const ITEMS: [Item; 7] = [
         is_transparent: false,
         is_solid: true,
         textures: [5, 6, 5, 5, 6, 5],
+        light_multiplier: 0.0,
     },
     Item {
         name: "Leave",
@@ -55,6 +62,15 @@ pub const ITEMS: [Item; 7] = [
         is_transparent: true,
         is_solid: true,
         textures: [16, 16, 16, 16, 16, 16],
+        light_multiplier: 0.8,
+    },
+    Item {
+        name: "Sand",
+        id: 7,
+        is_transparent: false,
+        is_solid: true,
+        textures: [10, 10, 10, 10, 10, 10],
+        light_multiplier: 0.0,
     },
 ];
 
@@ -67,6 +83,7 @@ pub enum Items {
     Glass,
     Wood,
     Leave,
+    Sand,
 }
 
 pub struct Item {
@@ -75,4 +92,5 @@ pub struct Item {
     pub is_transparent: bool,
     pub is_solid: bool,
     pub textures: [u16; 6],
+    pub light_multiplier: f32,
 }

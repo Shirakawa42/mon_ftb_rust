@@ -3,19 +3,22 @@ mod chunk_filling;
 mod game_material;
 mod greedy_meshing_inits;
 mod items;
-mod world;
+mod lighting;
 mod structures;
+mod world;
+
+use std::sync::{Arc, RwLock};
 
 use bevy::{
     asset::LoadState,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    input::{keyboard::KeyboardInput, ButtonState},
     prelude::*,
     render::{
         render_resource::{AddressMode, SamplerDescriptor},
         texture::ImageSettings,
     },
     window::PresentMode,
-    input::{keyboard::KeyboardInput, ButtonState},
 };
 use bevy_flycam::PlayerPlugin;
 use bevy_inspector_egui::WorldInspectorPlugin;
@@ -32,8 +35,8 @@ struct LoadingTexture {
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let mut world = world::World::new();
-    world.create_and_fill_chunks();
+    let world = Arc::new(RwLock::new(world::World::new()));
+    world.read().unwrap().start_world(world.clone());
     commands.insert_resource(world);
 
     commands.insert_resource(LoadingTexture {
@@ -42,7 +45,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     });
 }
 
-fn create_material(mut images: ResMut<Assets<Image>>, mut world: ResMut<world::World>, mut materials: ResMut<Assets<GameMaterial>>, mut loading_texture: ResMut<LoadingTexture>, asset_server: Res<AssetServer>) {
+fn create_material(mut images: ResMut<Assets<Image>>, world: ResMut<Arc<RwLock<world::World>>>, mut materials: ResMut<Assets<GameMaterial>>, mut loading_texture: ResMut<LoadingTexture>, asset_server: Res<AssetServer>) {
     if loading_texture.is_loaded || asset_server.get_load_state(loading_texture.handle.clone()) != LoadState::Loaded {
         return;
     }
@@ -57,34 +60,39 @@ fn create_material(mut images: ResMut<Assets<Image>>, mut world: ResMut<world::W
     let material_handle = materials.add(GameMaterial {
         array_texture: loading_texture.handle.clone(),
     });
-    world.material = material_handle;
+    *world.read().unwrap().material.write().unwrap() = material_handle;
 }
 
-fn draw_chunks_to_draw(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, world: ResMut<world::World>, loading_texture: Res<LoadingTexture>) {
+fn draw_chunks_to_draw(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, world: ResMut<Arc<RwLock<world::World>>>, loading_texture: Res<LoadingTexture>) {
     if !loading_texture.is_loaded {
         return;
     }
-    let mut chunks_to_draw = world.chunks_to_draw.write().unwrap();
+    let chunks_to_draw = world.read().unwrap().chunks_to_draw.clone();
     for _ in 0..CHUNK_PER_FRAME {
-        if chunks_to_draw.len() >= 1 {
-            let pos = chunks_to_draw.pop_front().unwrap();
-            world.chunks.read().unwrap().get(&pos).unwrap().write().unwrap().draw_mesh(&mut commands, &mut meshes, world.material.clone());
+        if chunks_to_draw.read().unwrap().len() >= 1 {
+            let pos = chunks_to_draw.write().unwrap().pop_front().unwrap();
+            let chunks = world.read().unwrap().chunks.clone();
+            let chunk = chunks.read().unwrap().get(&pos).unwrap().clone();
+            chunk.write().unwrap().draw_mesh(&mut commands, &mut meshes, world.read().unwrap().material.read().unwrap().clone());
         } else {
             break;
         }
     }
 }
 
-fn update_chunks_to_update(mut world: ResMut<world::World>) {
-    world.update_chunks_to_update();
+fn update_chunks_to_update(world: ResMut<Arc<RwLock<world::World>>>) {
+    world.read().unwrap().update_chunks_to_update();
 }
 
-fn force_update_all_chunks(world: ResMut<world::World>, mut keys: EventReader<KeyboardInput>) {
+fn force_update_all_chunks(world: ResMut<Arc<RwLock<world::World>>>, mut keys: EventReader<KeyboardInput>) {
     for key in keys.iter() {
         if key.key_code == Some(KeyCode::F) && key.state == ButtonState::Pressed {
             println!("updating");
-            world.chunks.write().unwrap().iter_mut().for_each(|(_, chunk)| {
-                world.chunks_to_update.write().unwrap().insert(chunk.read().unwrap().position);
+            world.read().unwrap().chunks.write().unwrap().iter_mut().for_each(|(_, chunk)| {
+                if chunk.read().unwrap().drawn {
+                    let chunks_to_update = world.read().unwrap().chunks_to_update.clone();
+                    chunks_to_update.write().unwrap().insert(chunk.read().unwrap().position);
+                }
             });
         }
     }
