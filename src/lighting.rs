@@ -1,68 +1,80 @@
-use std::sync::{Arc, RwLock};
-
-use bevy::utils::HashMap;
 use block_mesh::ndshape::ConstShape;
 
 use crate::{
     chunk::{Chunk, ChunkShape, CHUNK_SIZE, REAL_CHUNK_SIZE},
     items::ITEMS,
-    structures::{world_position_to_chunk_position, LightModification},
+    positions::{world_position_to_chunk_position, world_position_to_position_in_chunk, WorldPosition},
+    structures::LightModification,
 };
 
-pub fn recalculate_natural_light(chunks: Arc<RwLock<HashMap<[i32; 3], Arc<RwLock<Chunk>>>>>, current_chunk: &Chunk, sky_heights: &RwLock<[i32; (CHUNK_SIZE * CHUNK_SIZE) as usize]>) {
+pub const MIN_LIGHT_LEVEL: u8 = 10;
+const LIGHT_ATTENUATION_CHUNK_START_LEVEL: i32 = 0;
+const LIGHT_ATTENUATION_POWER: u8 = 2;
+const PROFOUND_CHUNK: i32 = -(256.0 / LIGHT_ATTENUATION_POWER as f64 / (REAL_CHUNK_SIZE as f64)) as i32 + LIGHT_ATTENUATION_CHUNK_START_LEVEL;
+
+pub fn recalculate_natural_light(current_chunk: &Chunk) {
     for x in 1..CHUNK_SIZE - 1 {
         for z in 1..CHUNK_SIZE - 1 {
-            cast_natural_light(chunks.clone(), current_chunk, x, z, sky_heights);
+            cast_natural_light(current_chunk, x, z);
         }
     }
 }
 
-fn cast_natural_light(chunks: Arc<RwLock<HashMap<[i32; 3], Arc<RwLock<Chunk>>>>>, current_chunk: &Chunk, x: u32, z: u32, sky_heights: &RwLock<[i32; (CHUNK_SIZE * CHUNK_SIZE) as usize]>) {
+fn no_light_column(current_chunk: &Chunk, x: u32, z: u32) {
+    for y in 1..CHUNK_SIZE - 1 {
+        current_chunk.modify_light_at_pos_no_update(
+            LightModification {
+                light_level: MIN_LIGHT_LEVEL,
+                position: ChunkShape::linearize([x, y, z]) as usize,
+            },
+            current_chunk.position,
+        );
+    }
+}
+
+fn get_light_multiplier_at_world_position(current_chunk: &Chunk, world_position: WorldPosition) -> f32 {
+    let chunk_position = world_position_to_chunk_position(world_position);
+    let position_in_chunk = ChunkShape::linearize(world_position_to_position_in_chunk(world_position)) as usize;
+    if current_chunk.position == chunk_position {
+        return ITEMS[current_chunk.cubes.read().unwrap()[position_in_chunk].id as usize].light_multiplier;
+    } else if current_chunk.world.read().unwrap().chunks.read().unwrap().contains_key(&chunk_position) {
+        let chunk = current_chunk.world.read().unwrap().chunks.read().unwrap().get(&chunk_position).unwrap().clone();
+        if *chunk.read().unwrap().filled.read().unwrap() {
+            return ITEMS[chunk.read().unwrap().cubes.read().unwrap()[position_in_chunk].id as usize].light_multiplier;
+        }
+    }
+    return ITEMS[current_chunk.world.read().unwrap().chunk_filling.read().unwrap().fill_block(world_position, current_chunk, false).id as usize].light_multiplier;
+}
+
+fn cast_natural_light(current_chunk: &Chunk, x: u32, z: u32) {
+    if current_chunk.position.y <= PROFOUND_CHUNK {
+        return no_light_column(current_chunk, x, z);
+    }
+
     let [gx, gz] = [
-        (x as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * current_chunk.position[0]) as f64,
-        (z as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * current_chunk.position[2]) as f64,
+        (x as i32 - 1) + (REAL_CHUNK_SIZE as i32 * current_chunk.position.x),
+        (z as i32 - 1) + (REAL_CHUNK_SIZE as i32 * current_chunk.position.z),
     ];
 
-    let mut start_y = sky_heights.read().unwrap()[((x + (z * CHUNK_SIZE)) as usize)] + 16;
+    let sky_height = 32;
     let mut light_level = 255.0;
+    let min_height = current_chunk.position.y * REAL_CHUNK_SIZE as i32 - REAL_CHUNK_SIZE as i32 + 1;
 
-    while light_level > 0.0 && start_y > (current_chunk.position[1] * REAL_CHUNK_SIZE as i32 - REAL_CHUNK_SIZE as i32) {
-        let chunk_pos = world_position_to_chunk_position([gx as i32, start_y, gz as i32]);
-        let mut exist_and_filled = false;
-        if chunks.read().unwrap().contains_key(&chunk_pos) {
-            let chunk = chunks.read().unwrap().get(&chunk_pos).unwrap().clone();
-            exist_and_filled = *chunk.read().unwrap().filled.read().unwrap();
-        }
-        let mut local_y = (start_y.rem_euclid(REAL_CHUNK_SIZE as i32)) as i32 + 2;
-        if exist_and_filled {
-            while local_y >= 0 && light_level > 0.0 {
-                light_level *= ITEMS[current_chunk.cubes.read().unwrap()[ChunkShape::linearize([x, local_y as u32, z]) as usize].id as usize].light_multiplier;
-                if chunk_pos[1] == current_chunk.position[1] {
-                    current_chunk.modify_light_at_pos_no_update(
-                        LightModification {
-                            position: ChunkShape::linearize([x, local_y as u32, z]) as usize,
-                            light_level: light_level as u8,
-                        },
-                        current_chunk.position,
-                    );
-                }
-                local_y -= 1;
-                start_y -= 1;
-            }
-        } else if chunk_pos[1] == current_chunk.position[1] {
-            light_level *= ITEMS[current_chunk.cubes.read().unwrap()[ChunkShape::linearize([x, local_y as u32, z]) as usize].id as usize].light_multiplier;
+    for current_height in (min_height..sky_height).rev() {
+        let chunk_position = world_position_to_chunk_position(WorldPosition { x: gx, y: current_height, z: gz });
+
+        light_level *= get_light_multiplier_at_world_position(current_chunk, WorldPosition { x: gx, y: current_height, z: gz });
+
+        if chunk_position == current_chunk.position {
             current_chunk.modify_light_at_pos_no_update(
                 LightModification {
-                    position: ChunkShape::linearize([x, local_y as u32, z]) as usize,
                     light_level: light_level as u8,
+                    position: ChunkShape::linearize([x, ((current_height).rem_euclid(REAL_CHUNK_SIZE as i32)) as u32 + 1, z]) as usize,
                 },
                 current_chunk.position,
             );
-            start_y -= 1;
-        } else {
-            let chunk_filling = current_chunk.world.read().unwrap().chunk_filling.clone();
-            light_level *= ITEMS[chunk_filling.read().unwrap().fill_block(gx, start_y as f64, gz, current_chunk, false).id as usize].light_multiplier;
-            start_y -= 1;
+        } else if light_level <= MIN_LIGHT_LEVEL as f32 {
+            return no_light_column(current_chunk, x, z);
         }
     }
 }

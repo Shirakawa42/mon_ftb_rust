@@ -4,20 +4,20 @@ use bevy::prelude::*;
 use bevy::utils::HashMap;
 use linked_hash_set::LinkedHashSet;
 
-use crate::chunk::{Chunk, CHUNK_SIZE};
+use crate::chunk::Chunk;
 use crate::chunk_filling;
 use crate::game_material::GameMaterial;
+use crate::positions::ChunkPosition;
 
 const NB_THREADS: usize = 1;
 const NB_UPDATE_THREADS: usize = 1;
 
 #[derive(Component)]
 pub struct World {
-    pub chunks: Arc<RwLock<HashMap<[i32; 3], Arc<RwLock<Chunk>>>>>,
-    pub sky_heights: Arc<RwLock<HashMap<[i32; 2], RwLock<[i32; (CHUNK_SIZE * CHUNK_SIZE) as usize]>>>>,
+    pub chunks: Arc<RwLock<HashMap<ChunkPosition, Arc<RwLock<Chunk>>>>>,
     pub material: RwLock<Handle<GameMaterial>>,
-    pub chunks_to_draw: Arc<RwLock<LinkedHashSet<[i32; 3]>>>,
-    pub chunks_to_update: Arc<RwLock<LinkedHashSet<[i32; 3]>>>,
+    pub chunks_to_draw: Arc<RwLock<LinkedHashSet<ChunkPosition>>>,
+    pub chunks_to_update: Arc<RwLock<LinkedHashSet<ChunkPosition>>>,
     pub thread_pool: rayon::ThreadPool,
     pub update_thread_pool: rayon::ThreadPool,
     pub world_thread_pool: rayon::ThreadPool,
@@ -28,7 +28,6 @@ pub struct World {
 impl World {
     pub fn new() -> Self {
         let chunks = Arc::new(RwLock::new(HashMap::new()));
-        let sky_heights = Arc::new(RwLock::new(HashMap::new()));
         let material = RwLock::new(Handle::default());
         let chunks_to_draw = Arc::new(RwLock::new(LinkedHashSet::new()));
         let chunks_to_update = Arc::new(RwLock::new(LinkedHashSet::new()));
@@ -39,7 +38,6 @@ impl World {
 
         Self {
             chunks,
-            sky_heights,
             material,
             chunks_to_draw,
             chunks_to_update,
@@ -75,10 +73,10 @@ impl World {
 
     // called each time player change chunk
     pub fn create_and_fill_chunks(&self, world: Arc<RwLock<World>>) {
-        for x in -8..9 {
-            for y in -4..1 {
+        for y in (-4..2).rev() {
+            for x in -8..9 {
                 for z in -8..9 {
-                    let pos = [x, y, z];
+                    let pos = ChunkPosition { x, y, z };
 
                     {
                         let mut chunks_lock = self.chunks.write().unwrap();
@@ -86,23 +84,19 @@ impl World {
                             chunks_lock.insert(pos, Arc::new(RwLock::new(Chunk::new(pos, world.clone()))));
                         }
                     }
+
                     let chunk = Arc::clone(self.chunks.read().unwrap().get(&pos).unwrap());
                     if chunk.read().unwrap().drawn {
                         continue;
                     }
-                    if !self.sky_heights.read().unwrap().contains_key(&[pos[0], pos[2]]) {
-                        self.sky_heights.write().unwrap().insert([pos[0], pos[2]], RwLock::new([32; (CHUNK_SIZE * CHUNK_SIZE) as usize]));
-                    }
                     let chunks_to_draw = Arc::clone(&self.chunks_to_draw);
                     let chunk_filling = self.chunk_filling.clone();
-                    let chunks = self.chunks.clone();
-                    let sky_heights = self.sky_heights.clone();
                     let nb_chunks_generating = self.nb_chunks_generating.clone();
                     *self.nb_chunks_generating.write().unwrap() += 1;
 
                     self.thread_pool.spawn(move || {
                         if !*chunk.read().unwrap().filled.read().unwrap() {
-                            chunk.read().unwrap().fill_chunk(chunk_filling, chunks.clone(), sky_heights.read().unwrap().get(&[pos[0], pos[2]]).unwrap());
+                            chunk.read().unwrap().fill_chunk(chunk_filling);
                             chunk.read().unwrap().modify_other_chunks();
                         }
                         chunk.write().unwrap().update_mesh();

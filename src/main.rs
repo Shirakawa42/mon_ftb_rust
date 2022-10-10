@@ -4,21 +4,26 @@ mod game_material;
 mod greedy_meshing_inits;
 mod items;
 mod lighting;
+mod positions;
 mod structures;
 mod world;
 
-use std::{sync::{Arc, RwLock}, time::Instant};
+use std::{
+    sync::{Arc, RwLock},
+    time::Instant,
+};
 
 use bevy::{
     asset::LoadState,
-    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    diagnostic::LogDiagnosticsPlugin,
     input::{keyboard::KeyboardInput, ButtonState},
+    pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
     render::{
         render_resource::{AddressMode, SamplerDescriptor},
         texture::ImageSettings,
     },
-    window::PresentMode, pbr::wireframe::{WireframePlugin, WireframeConfig},
+    window::PresentMode,
 };
 use bevy_flycam::PlayerPlugin;
 use bevy_inspector_egui::WorldInspectorPlugin;

@@ -1,10 +1,11 @@
-use std::{sync::{Arc, RwLock}, time::Instant};
+use std::sync::{Arc, RwLock};
 
 use crate::{
     chunk_filling::ChunkFilling,
     game_material::GameMaterial,
-    items::{Items, FACES, ITEMS},
+    items::{FACES, ITEMS},
     lighting::recalculate_natural_light,
+    positions::{ChunkPosition, WorldPosition},
     structures::{LightModification, Modification},
     world,
 };
@@ -14,7 +15,7 @@ use bevy::{
         mesh::{Indices, MeshVertexAttribute},
         render_resource::{PrimitiveTopology, VertexFormat},
     },
-    utils::{HashMap, HashSet},
+    utils::HashSet,
 };
 use block_mesh::{
     greedy_quads,
@@ -40,7 +41,7 @@ pub struct Cube {
 #[derive(Component)]
 pub struct Chunk {
     pub cubes: Arc<RwLock<[Cube; (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as usize]>>,
-    pub position: [i32; 3],
+    pub position: ChunkPosition,
     indices: Vec<u32>,
     vertices: Vec<[f32; 3]>,
     normals: Vec<[f32; 3]>,
@@ -50,8 +51,8 @@ pub struct Chunk {
     ambient_occlusion: Vec<f32>,
     pub modifications: RwLock<LinkedHashMap<usize, Modification>>,
     pub light_modifications: RwLock<Vec<LightModification>>,
-    pub other_chunks_modifications: RwLock<LinkedHashMap<(usize, [i32; 3]), ([i32; 3], Modification)>>,
-    pub other_chunks_light_modifications: RwLock<Vec<([i32; 3], LightModification)>>,
+    pub other_chunks_modifications: RwLock<LinkedHashMap<(usize, ChunkPosition), (ChunkPosition, Modification)>>,
+    pub other_chunks_light_modifications: RwLock<Vec<(ChunkPosition, LightModification)>>,
     pub filled: Arc<RwLock<bool>>,
     pub drawn: bool,
     gameobject: Option<Entity>,
@@ -60,7 +61,7 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn new(position: [i32; 3], world: Arc<RwLock<world::World>>) -> Self {
+    pub fn new(position: ChunkPosition, world: Arc<RwLock<world::World>>) -> Self {
         let cubes = Arc::new(RwLock::new([Cube { id: 0, light_level: 0 }; (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as usize]));
         let indices = Vec::new();
         let vertices = Vec::new();
@@ -96,8 +97,34 @@ impl Chunk {
         }
     }
 
+    pub fn fill_chunk(&self, chunk_filling: Arc<RwLock<ChunkFilling>>) {
+        for i in 0..CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE {
+            let [x, y, z] = ChunkShape::delinearize(i);
+            let world_position = WorldPosition {
+                x: (x as i32 - 1) + (REAL_CHUNK_SIZE as i32 * self.position.x) as i32,
+                y: (y as i32 - 1) + (REAL_CHUNK_SIZE as i32 * self.position.y) as i32,
+                z: (z as i32 - 1) + (REAL_CHUNK_SIZE as i32 * self.position.z) as i32,
+            };
+            self.cubes.write().unwrap()[i as usize] = chunk_filling.read().unwrap().fill_block(world_position, self, true);
+        }
+        self.apply_self_modifications();
+        *self.filled.write().unwrap() = true;
+        recalculate_natural_light(self);
+    }
+
+    pub fn apply_self_modifications(&self) {
+        while self.modifications.read().unwrap().len() > 0 {
+            let (_, modification) = self.modifications.write().unwrap().pop_back().unwrap();
+            let position = modification.position;
+            if modification.force || self.cubes.read().unwrap()[position].id == 0 {
+                self.modify_neighbours(self.position, &modification);
+                self.cubes.write().unwrap()[position].id = modification.id;
+            }
+        }
+    }
+
     pub fn modify_other_chunks(&self) {
-        let mut modified_chunks: HashSet<[i32; 3]> = HashSet::new();
+        let mut modified_chunks: HashSet<ChunkPosition> = HashSet::new();
         let chunks = self.world.read().unwrap().chunks.clone();
 
         while self.other_chunks_modifications.read().unwrap().len() > 0 {
@@ -133,11 +160,15 @@ impl Chunk {
         }
     }
 
-    fn modify_neighbours(&self, chunk_position: [i32; 3], modification: &Modification) {
+    fn modify_neighbours(&self, chunk_position: ChunkPosition, modification: &Modification) {
         let modification_pos = ChunkShape::delinearize(modification.position as u32);
 
         if modification_pos[0] == 1 {
-            let other_chunk_position = [chunk_position[0] - 1, chunk_position[1], chunk_position[2]];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x - 1,
+                y: chunk_position.y,
+                z: chunk_position.z,
+            };
             let modification = Modification {
                 position: ChunkShape::linearize([REAL_CHUNK_SIZE + 1, modification_pos[1], modification_pos[2]]) as usize,
                 id: modification.id,
@@ -152,7 +183,11 @@ impl Chunk {
                     .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
             }
         } else if modification_pos[0] == REAL_CHUNK_SIZE {
-            let other_chunk_position = [chunk_position[0] + 1, chunk_position[1], chunk_position[2]];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x + 1,
+                y: chunk_position.y,
+                z: chunk_position.z,
+            };
             let modification = Modification {
                 position: ChunkShape::linearize([0, modification_pos[1], modification_pos[2]]) as usize,
                 id: modification.id,
@@ -168,7 +203,11 @@ impl Chunk {
             }
         }
         if modification_pos[1] == 1 {
-            let other_chunk_position = [chunk_position[0], chunk_position[1] - 1, chunk_position[2]];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x,
+                y: chunk_position.y - 1,
+                z: chunk_position.z,
+            };
             let modification = Modification {
                 position: ChunkShape::linearize([modification_pos[0], REAL_CHUNK_SIZE + 1, modification_pos[2]]) as usize,
                 id: modification.id,
@@ -183,7 +222,11 @@ impl Chunk {
                     .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
             }
         } else if modification_pos[1] == REAL_CHUNK_SIZE {
-            let other_chunk_position = [chunk_position[0], chunk_position[1] + 1, chunk_position[2]];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x,
+                y: chunk_position.y + 1,
+                z: chunk_position.z,
+            };
             let modification = Modification {
                 position: ChunkShape::linearize([modification_pos[0], 0, modification_pos[2]]) as usize,
                 id: modification.id,
@@ -199,7 +242,11 @@ impl Chunk {
             }
         }
         if modification_pos[2] == 1 {
-            let other_chunk_position = [chunk_position[0], chunk_position[1], chunk_position[2] - 1];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x,
+                y: chunk_position.y,
+                z: chunk_position.z - 1,
+            };
             let modification = Modification {
                 position: ChunkShape::linearize([modification_pos[0], modification_pos[1], REAL_CHUNK_SIZE + 1]) as usize,
                 id: modification.id,
@@ -214,7 +261,11 @@ impl Chunk {
                     .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
             }
         } else if modification_pos[2] == REAL_CHUNK_SIZE {
-            let other_chunk_position = [chunk_position[0], chunk_position[1], chunk_position[2] + 1];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x,
+                y: chunk_position.y,
+                z: chunk_position.z + 1,
+            };
             let modification = Modification {
                 position: ChunkShape::linearize([modification_pos[0], modification_pos[1], 0]) as usize,
                 id: modification.id,
@@ -231,11 +282,15 @@ impl Chunk {
         }
     }
 
-    fn modify_neighbours_light(&self, chunk_position: [i32; 3], modification: &LightModification) {
+    fn modify_neighbours_light(&self, chunk_position: ChunkPosition, modification: &LightModification) {
         let modification_pos = ChunkShape::delinearize(modification.position as u32);
 
         if modification_pos[0] == 1 {
-            let other_chunk_position = [chunk_position[0] - 1, chunk_position[1], chunk_position[2]];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x - 1,
+                y: chunk_position.y,
+                z: chunk_position.z,
+            };
             let modification = LightModification {
                 position: ChunkShape::linearize([REAL_CHUNK_SIZE + 1, modification_pos[1], modification_pos[2]]) as usize,
                 light_level: modification.light_level,
@@ -246,7 +301,11 @@ impl Chunk {
                 self.other_chunks_light_modifications.write().unwrap().push((other_chunk_position, modification));
             }
         } else if modification_pos[0] == REAL_CHUNK_SIZE {
-            let other_chunk_position = [chunk_position[0] + 1, chunk_position[1], chunk_position[2]];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x + 1,
+                y: chunk_position.y,
+                z: chunk_position.z,
+            };
             let modification = LightModification {
                 position: ChunkShape::linearize([0, modification_pos[1], modification_pos[2]]) as usize,
                 light_level: modification.light_level,
@@ -258,7 +317,11 @@ impl Chunk {
             }
         }
         if modification_pos[1] == 1 {
-            let other_chunk_position = [chunk_position[0], chunk_position[1] - 1, chunk_position[2]];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x,
+                y: chunk_position.y - 1,
+                z: chunk_position.z,
+            };
             let modification = LightModification {
                 position: ChunkShape::linearize([modification_pos[0], REAL_CHUNK_SIZE + 1, modification_pos[2]]) as usize,
                 light_level: modification.light_level,
@@ -269,7 +332,11 @@ impl Chunk {
                 self.other_chunks_light_modifications.write().unwrap().push((other_chunk_position, modification));
             }
         } else if modification_pos[1] == REAL_CHUNK_SIZE {
-            let other_chunk_position = [chunk_position[0], chunk_position[1] + 1, chunk_position[2]];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x,
+                y: chunk_position.y + 1,
+                z: chunk_position.z,
+            };
             let modification = LightModification {
                 position: ChunkShape::linearize([modification_pos[0], 0, modification_pos[2]]) as usize,
                 light_level: modification.light_level,
@@ -281,7 +348,11 @@ impl Chunk {
             }
         }
         if modification_pos[2] == 1 {
-            let other_chunk_position = [chunk_position[0], chunk_position[1], chunk_position[2] - 1];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x,
+                y: chunk_position.y,
+                z: chunk_position.z - 1,
+            };
             let modification = LightModification {
                 position: ChunkShape::linearize([modification_pos[0], modification_pos[1], REAL_CHUNK_SIZE + 1]) as usize,
                 light_level: modification.light_level,
@@ -292,7 +363,11 @@ impl Chunk {
                 self.other_chunks_light_modifications.write().unwrap().push((other_chunk_position, modification));
             }
         } else if modification_pos[2] == REAL_CHUNK_SIZE {
-            let other_chunk_position = [chunk_position[0], chunk_position[1], chunk_position[2] + 1];
+            let other_chunk_position = ChunkPosition {
+                x: chunk_position.x,
+                y: chunk_position.y,
+                z: chunk_position.z + 1,
+            };
             let modification = LightModification {
                 position: ChunkShape::linearize([modification_pos[0], modification_pos[1], 0]) as usize,
                 light_level: modification.light_level,
@@ -305,7 +380,7 @@ impl Chunk {
         }
     }
 
-    pub fn add_modification_no_update(&self, modification: Modification, chunk_position: [i32; 3]) {
+    pub fn add_modification_no_update(&self, modification: Modification, chunk_position: ChunkPosition) {
         if chunk_position == self.position {
             let exist = self.modifications.read().unwrap().contains_key(&modification.position);
             if exist && modification.force {
@@ -325,7 +400,7 @@ impl Chunk {
         }
     }
 
-    pub fn modify_light_at_pos_no_update(&self, modification: LightModification, chunk_position: [i32; 3]) {
+    pub fn modify_light_at_pos_no_update(&self, modification: LightModification, chunk_position: ChunkPosition) {
         self.modify_neighbours_light(chunk_position, &modification);
         if chunk_position == self.position {
             self.light_modifications.write().unwrap().push(modification);
@@ -334,49 +409,13 @@ impl Chunk {
         }
     }
 
-    pub fn fill_chunk(&self, chunk_filling: Arc<RwLock<ChunkFilling>>, chunks: Arc<RwLock<HashMap<[i32; 3], Arc<RwLock<Chunk>>>>>, sky_heights: &RwLock<[i32; (CHUNK_SIZE * CHUNK_SIZE) as usize]>) {
-        let mut column_heights: [[i32; CHUNK_SIZE as usize]; CHUNK_SIZE as usize] = [[0; CHUNK_SIZE as usize]; CHUNK_SIZE as usize];
-
-        for i in 0..CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE {
-            let [x, y, z] = ChunkShape::delinearize(i);
-            let [gx, gy, gz] = [
-                (x as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * self.position[0]) as f64,
-                (y as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * self.position[1]) as f64,
-                (z as f64 - 1.0) + (REAL_CHUNK_SIZE as i32 * self.position[2]) as f64,
-            ];
-            self.cubes.write().unwrap()[i as usize] = chunk_filling.read().unwrap().fill_block(gx, gy, gz, self, true);
-            if self.cubes.write().unwrap()[i as usize].id != Items::Air as u16 && gy as i32 > column_heights[x as usize][z as usize] {
-                column_heights[x as usize][z as usize] = (gy + 1.0) as i32;
-            }
-        }
-        for x in 0..CHUNK_SIZE {
-            for z in 0..CHUNK_SIZE {
-                if sky_heights.read().unwrap()[((x + (z * CHUNK_SIZE)) as usize)] < column_heights[x as usize][z as usize] {
-                    sky_heights.write().unwrap()[((x + (z * CHUNK_SIZE)) as usize)] = column_heights[x as usize][z as usize];
-                }
-            }
-        }
-        self.apply_self_modifications();
-        *self.filled.write().unwrap() = true;
-        recalculate_natural_light(chunks, self, sky_heights);
-    }
-
-    pub fn apply_self_modifications(&self) {
-        while self.modifications.read().unwrap().len() > 0 {
-            let (_, modification) = self.modifications.write().unwrap().pop_back().unwrap();
-            let position = modification.position;
-            if modification.force || self.cubes.read().unwrap()[position].id == 0 {
-                self.modify_neighbours(self.position, &modification);
-                self.cubes.write().unwrap()[position].id = modification.id;
-            }
-        }
-    }
-
     pub fn apply_self_light_modifications(&self) {
         while self.light_modifications.read().unwrap().len() > 0 {
             let light_modifications = self.light_modifications.write().unwrap().pop().unwrap();
             let position = light_modifications.position;
-            self.cubes.write().unwrap()[position].light_level = light_modifications.light_level;
+            if self.cubes.read().unwrap()[position].light_level < light_modifications.light_level {
+                self.cubes.write().unwrap()[position].light_level = light_modifications.light_level;
+            }
         }
     }
 
@@ -397,9 +436,9 @@ impl Chunk {
                 mesh: meshes.add(mesh),
                 material: material.clone(),
                 transform: Transform::from_xyz(
-                    self.position[0] as f32 * REAL_CHUNK_SIZE as f32,
-                    self.position[1] as f32 * REAL_CHUNK_SIZE as f32,
-                    self.position[2] as f32 * REAL_CHUNK_SIZE as f32,
+                    self.position.x as f32 * REAL_CHUNK_SIZE as f32,
+                    self.position.y as f32 * REAL_CHUNK_SIZE as f32,
+                    self.position.z as f32 * REAL_CHUNK_SIZE as f32,
                 ),
                 ..default()
             });
@@ -455,7 +494,7 @@ impl Chunk {
 
         //self.update_count += 1;
         //if self.update_count > 1 {
-        //    println!("Chunk {} {} {} updated {} times", self.position[0], self.position[1], self.position[2], self.update_count);
+        //    println!("Chunk {} {} {} updated {} times", self.position.x, self.position.y, self.position.z, self.update_count);
         //}
     }
 }
