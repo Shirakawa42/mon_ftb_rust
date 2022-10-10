@@ -22,6 +22,7 @@ pub struct World {
     pub update_thread_pool: rayon::ThreadPool,
     pub world_thread_pool: rayon::ThreadPool,
     pub chunk_filling: Arc<RwLock<chunk_filling::ChunkFilling>>,
+    pub nb_chunks_generating: Arc<RwLock<usize>>,
 }
 
 impl World {
@@ -46,6 +47,7 @@ impl World {
             update_thread_pool,
             world_thread_pool,
             chunk_filling,
+            nb_chunks_generating: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -73,9 +75,9 @@ impl World {
 
     // called each time player change chunk
     pub fn create_and_fill_chunks(&self, world: Arc<RwLock<World>>) {
-        for x in 0..2 {
-            for y in 0..4 {
-                for z in 0..2 {
+        for x in -8..9 {
+            for y in -4..1 {
+                for z in -8..9 {
                     let pos = [x, y, z];
 
                     {
@@ -95,6 +97,8 @@ impl World {
                     let chunk_filling = self.chunk_filling.clone();
                     let chunks = self.chunks.clone();
                     let sky_heights = self.sky_heights.clone();
+                    let nb_chunks_generating = self.nb_chunks_generating.clone();
+                    *self.nb_chunks_generating.write().unwrap() += 1;
 
                     self.thread_pool.spawn(move || {
                         if !*chunk.read().unwrap().filled.read().unwrap() {
@@ -103,6 +107,7 @@ impl World {
                         }
                         chunk.write().unwrap().update_mesh();
                         chunks_to_draw.write().unwrap().insert_if_absent(pos);
+                        *nb_chunks_generating.write().unwrap() -= 1;
                     });
                 }
             }

@@ -10,10 +10,11 @@ fn fragment(
 @location(2) uv: vec2<f32>,
 @location(3) layer: i32,
 @location(4) light_level: f32,
+@location(5) ambient_occlusion: f32,
 ) -> @location(0) vec4<f32> {
     var color = textureSample(my_array_texture, my_array_texture_sampler, uv, layer);
     if (color.a < 0.5) {
         discard;
     }
-    return color * light_level;
+    return color * light_level * ((ambient_occlusion + 0.5) / 3.5);
 }

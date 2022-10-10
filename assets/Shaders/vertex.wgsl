@@ -8,6 +8,7 @@ struct Vertex {
     @location(2) uv: vec2<f32>,
     @location(3) layer: i32,
     @location(4) light_level: f32,
+    @location(5) ambient_occlusion: f32,
 };
 
 struct VertexOutput {
@@ -15,6 +16,7 @@ struct VertexOutput {
     #import bevy_pbr::mesh_vertex_output
     @location(3) layer: i32,
     @location(4) light_level: f32,
+    @location(5) ambient_occlusion: f32,
 };
 
 @vertex
@@ -28,5 +30,6 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     out.clip_position = mesh_position_world_to_clip(out.world_position);
     out.layer = vertex.layer;
     out.light_level = vertex.light_level;
+    out.ambient_occlusion = vertex.ambient_occlusion;
     return out;
 }

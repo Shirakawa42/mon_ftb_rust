@@ -8,7 +8,7 @@ use bevy::{
     },
 };
 
-use crate::chunk::{ATTRIBUTE_LAYER, ATTRIBUTE_LIGHT_LEVEL};
+use crate::chunk::{ATTRIBUTE_LAYER, ATTRIBUTE_LIGHT_LEVEL, ATTRIBUTE_AO};
 
 #[derive(AsBindGroup, Debug, Clone, TypeUuid)]
 #[uuid = "9c5a0ddf-1eaf-41b4-9832-ed736fd26af3"]
@@ -34,6 +34,7 @@ impl Material for GameMaterial {
             Mesh::ATTRIBUTE_UV_0.at_shader_location(2),
             ATTRIBUTE_LAYER.at_shader_location(3),
             ATTRIBUTE_LIGHT_LEVEL.at_shader_location(4),
+            ATTRIBUTE_AO.at_shader_location(5),
         ])?;
         descriptor.vertex.buffers = vec![vertex_layout];
         Ok(())

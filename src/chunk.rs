@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::{sync::{Arc, RwLock}, time::Instant};
 
 use crate::{
     chunk_filling::ChunkFilling,
@@ -27,6 +27,7 @@ pub const CHUNK_SIZE: u32 = 34;
 pub const REAL_CHUNK_SIZE: u32 = CHUNK_SIZE - 2;
 pub const ATTRIBUTE_LAYER: MeshVertexAttribute = MeshVertexAttribute::new("Layer", 988540917, VertexFormat::Sint32);
 pub const ATTRIBUTE_LIGHT_LEVEL: MeshVertexAttribute = MeshVertexAttribute::new("Light_Level", 988164917, VertexFormat::Float32);
+pub const ATTRIBUTE_AO: MeshVertexAttribute = MeshVertexAttribute::new("Ambient_Occlusion", 988112155, VertexFormat::Float32);
 
 pub type ChunkShape = ConstShape3u32<CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE>;
 
@@ -46,6 +47,7 @@ pub struct Chunk {
     uvs: Vec<[f32; 2]>,
     layers: Vec<i32>,
     light_levels: Vec<f32>,
+    ambient_occlusion: Vec<f32>,
     pub modifications: RwLock<LinkedHashMap<usize, Modification>>,
     pub light_modifications: RwLock<Vec<LightModification>>,
     pub other_chunks_modifications: RwLock<LinkedHashMap<(usize, [i32; 3]), ([i32; 3], Modification)>>,
@@ -81,6 +83,7 @@ impl Chunk {
             uvs,
             layers,
             light_levels,
+            ambient_occlusion: Vec::new(),
             modifications,
             light_modifications,
             other_chunks_modifications,
@@ -386,6 +389,7 @@ impl Chunk {
             mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, std::mem::replace(&mut self.normals, Vec::new()));
             mesh.insert_attribute(ATTRIBUTE_LAYER, std::mem::replace(&mut self.layers, Vec::new()));
             mesh.insert_attribute(ATTRIBUTE_LIGHT_LEVEL, std::mem::replace(&mut self.light_levels, Vec::new()));
+            mesh.insert_attribute(ATTRIBUTE_AO, std::mem::replace(&mut self.ambient_occlusion, Vec::new()));
             if self.gameobject != None {
                 commands.entity(self.gameobject.unwrap()).despawn();
             }
@@ -415,6 +419,7 @@ impl Chunk {
         self.uvs = Vec::with_capacity(buffer.quads.num_quads() * 4);
         self.layers = Vec::with_capacity(buffer.quads.num_quads() * 4);
         self.light_levels = Vec::with_capacity(buffer.quads.num_quads() * 4);
+        self.ambient_occlusion = Vec::with_capacity(buffer.quads.num_quads() * 4);
 
         for (group, face) in buffer.quads.groups.into_iter().zip(faces.into_iter()) {
             for quad in group.into_iter() {
@@ -432,6 +437,10 @@ impl Chunk {
                     .light_level as f32
                     / 255.0;
                 self.light_levels.extend_from_slice(&[light_level, light_level, light_level, light_level]);
+                let ao = *&face.quad_mesh_ao(&quad);
+                for ambient in ao {
+                    self.ambient_occlusion.push(ambient as f32);
+                }
             }
             i += 1;
         }
@@ -444,7 +453,7 @@ impl Chunk {
         self.greedy_meshing();
         self.drawn = true;
 
-        self.update_count += 1;
+        //self.update_count += 1;
         //if self.update_count > 1 {
         //    println!("Chunk {} {} {} updated {} times", self.position[0], self.position[1], self.position[2], self.update_count);
         //}

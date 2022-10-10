@@ -22,11 +22,11 @@ impl ChunkFilling {
         if gy < noise {
             return Items::Sand as u16;
         } else if gy < noise + 1.0 && generate_structure {
-            if self.noise.get([gx / 1.12 + 128.25, gz / 1.12 + 128.25]) > 0.25 {
-                if self.noise.get([gx / 1.1 + 256.0, gz / 1.1 + 256.0]) > 0.5 {
-                    generate_tree([gx as i32, gy as i32, gz as i32], current_chunk)
-                }
-            }
+            //if self.noise.get([gx / 1.12 + 128.25, gz / 1.12 + 128.25]) > 0.25 {
+            //    if self.noise.get([gx / 1.1 + 256.0, gz / 1.1 + 256.0]) > 0.5 {
+            //        generate_tree([gx as i32, gy as i32, gz as i32], current_chunk)
+            //    }
+            //}
         }
         return Items::Air as u16;
     }
