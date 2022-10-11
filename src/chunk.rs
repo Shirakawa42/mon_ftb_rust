@@ -105,7 +105,8 @@ impl Chunk {
                 y: (y as i32 - 1) + (REAL_CHUNK_SIZE as i32 * self.position.y) as i32,
                 z: (z as i32 - 1) + (REAL_CHUNK_SIZE as i32 * self.position.z) as i32,
             };
-            self.cubes.write().unwrap()[i as usize] = chunk_filling.read().unwrap().fill_block(world_position, self, true);
+            let cube = chunk_filling.read().unwrap().fill_block(world_position, self, true);
+            self.cubes.write().unwrap()[i as usize] = cube;
         }
         self.apply_self_modifications();
         *self.filled.write().unwrap() = true;
@@ -113,12 +114,32 @@ impl Chunk {
     }
 
     pub fn apply_self_modifications(&self) {
-        while self.modifications.read().unwrap().len() > 0 {
-            let (_, modification) = self.modifications.write().unwrap().pop_back().unwrap();
-            let position = modification.position;
-            if modification.force || self.cubes.read().unwrap()[position].id == 0 {
-                self.modify_neighbours(self.position, &modification);
-                self.cubes.write().unwrap()[position].id = modification.id;
+        let len = self.modifications.read().unwrap().len();
+        if len > 0 {
+            let mut mod_lock = self.modifications.write().unwrap();
+            let mut cubes_lock = self.cubes.write().unwrap();
+            for _ in 0..len {
+                let (_, modification) = mod_lock.pop_back().unwrap();
+                let position = modification.position;
+                if modification.force || cubes_lock[position].id == 0 {
+                    self.modify_neighbours(self.position, &modification);
+                    cubes_lock[position].id = modification.id;
+                }
+            }
+        }
+    }
+
+    pub fn apply_self_light_modifications(&self) {
+        let len = self.light_modifications.read().unwrap().len();
+        if len > 0 {
+            let mut light_mod_lock = self.light_modifications.write().unwrap();
+            let mut cubes_lock = self.cubes.write().unwrap();
+            for _ in 0..len {
+                let light_modifications = light_mod_lock.pop().unwrap();
+                let position = light_modifications.position;
+                if cubes_lock[position].light_level < light_modifications.light_level {
+                    cubes_lock[position].light_level = light_modifications.light_level;
+                }
             }
         }
     }
@@ -174,14 +195,10 @@ impl Chunk {
                 id: modification.id,
                 force: modification.force,
             };
-            if other_chunk_position == self.position {
-                self.modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_modifications
-                    .write()
-                    .unwrap()
-                    .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
-            }
+            self.other_chunks_modifications
+                .write()
+                .unwrap()
+                .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
         } else if modification_pos[0] == REAL_CHUNK_SIZE {
             let other_chunk_position = ChunkPosition {
                 x: chunk_position.x + 1,
@@ -193,14 +210,10 @@ impl Chunk {
                 id: modification.id,
                 force: modification.force,
             };
-            if other_chunk_position == self.position {
-                self.modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_modifications
-                    .write()
-                    .unwrap()
-                    .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
-            }
+            self.other_chunks_modifications
+                .write()
+                .unwrap()
+                .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
         }
         if modification_pos[1] == 1 {
             let other_chunk_position = ChunkPosition {
@@ -213,14 +226,10 @@ impl Chunk {
                 id: modification.id,
                 force: modification.force,
             };
-            if other_chunk_position == self.position {
-                self.modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_modifications
-                    .write()
-                    .unwrap()
-                    .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
-            }
+            self.other_chunks_modifications
+                .write()
+                .unwrap()
+                .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
         } else if modification_pos[1] == REAL_CHUNK_SIZE {
             let other_chunk_position = ChunkPosition {
                 x: chunk_position.x,
@@ -232,14 +241,10 @@ impl Chunk {
                 id: modification.id,
                 force: modification.force,
             };
-            if other_chunk_position == self.position {
-                self.modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_modifications
-                    .write()
-                    .unwrap()
-                    .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
-            }
+            self.other_chunks_modifications
+                .write()
+                .unwrap()
+                .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
         }
         if modification_pos[2] == 1 {
             let other_chunk_position = ChunkPosition {
@@ -252,14 +257,10 @@ impl Chunk {
                 id: modification.id,
                 force: modification.force,
             };
-            if other_chunk_position == self.position {
-                self.modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_modifications
-                    .write()
-                    .unwrap()
-                    .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
-            }
+            self.other_chunks_modifications
+                .write()
+                .unwrap()
+                .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
         } else if modification_pos[2] == REAL_CHUNK_SIZE {
             let other_chunk_position = ChunkPosition {
                 x: chunk_position.x,
@@ -271,14 +272,10 @@ impl Chunk {
                 id: modification.id,
                 force: modification.force,
             };
-            if other_chunk_position == self.position {
-                self.modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_modifications
-                    .write()
-                    .unwrap()
-                    .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
-            }
+            self.other_chunks_modifications
+                .write()
+                .unwrap()
+                .insert((modification.position, other_chunk_position), (other_chunk_position, modification));
         }
     }
 
@@ -406,16 +403,6 @@ impl Chunk {
             self.light_modifications.write().unwrap().push(modification);
         } else {
             self.other_chunks_light_modifications.write().unwrap().push((chunk_position, modification));
-        }
-    }
-
-    pub fn apply_self_light_modifications(&self) {
-        while self.light_modifications.read().unwrap().len() > 0 {
-            let light_modifications = self.light_modifications.write().unwrap().pop().unwrap();
-            let position = light_modifications.position;
-            if self.cubes.read().unwrap()[position].light_level < light_modifications.light_level {
-                self.cubes.write().unwrap()[position].light_level = light_modifications.light_level;
-            }
         }
     }
 

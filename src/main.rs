@@ -31,7 +31,7 @@ use game_material::GameMaterial;
 
 const WIDTH: f32 = 1920.0;
 const HEIGHT: f32 = 1080.0;
-const CHUNK_PER_FRAME: usize = 128;
+const CHUNK_PER_FRAME: usize = 16;
 const TEXTURE_ARRAY_SIZE: u32 = 18;
 
 struct LoadingTexture {

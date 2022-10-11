@@ -12,6 +12,7 @@ pub struct Modification {
     pub position: usize,
 }
 
+#[derive(Clone)]
 pub struct LightModification {
     pub light_level: u8,
     pub position: usize,
