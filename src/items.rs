@@ -1,10 +1,10 @@
 pub const FACES: [[i8; 3]; 6] = [
     [-1, 0, 0], // left
     [0, -1, 0], // bottom
-    [0, 0, -1], //
+    [0, 0, -1], // back
     [1, 0, 0],  // right
     [0, 1, 0],  // top
-    [0, 0, 1],  // 
+    [0, 0, 1],  // front
 ];
 
 pub const ITEMS: [Item; 8] = [

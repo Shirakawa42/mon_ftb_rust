@@ -49,12 +49,14 @@ impl ChunkFilling {
         if world_position.y <= 0 {
             return Cube {
                 id: self.fill_caverns(world_position, generate_structure),
-                light_level: MIN_LIGHT_LEVEL,
+                natural_light_level: MIN_LIGHT_LEVEL,
+                items_light_level: 0,
             };
         }
         return Cube {
             id: self.fill_surface(world_position, current_chunk, generate_structure),
-            light_level: MIN_LIGHT_LEVEL,
+            natural_light_level: MIN_LIGHT_LEVEL,
+            items_light_level: 0,
         };
     }
 }

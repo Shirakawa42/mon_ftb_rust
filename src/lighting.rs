@@ -4,7 +4,6 @@ use crate::{
     chunk::{Chunk, ChunkShape, CHUNK_SIZE, REAL_CHUNK_SIZE},
     items::ITEMS,
     positions::{world_position_to_chunk_position, world_position_to_position_in_chunk, WorldPosition},
-    structures::LightModification,
 };
 
 pub const MIN_LIGHT_LEVEL: u8 = 10;
@@ -13,22 +12,17 @@ const LIGHT_ATTENUATION_POWER: u8 = 2;
 const PROFOUND_CHUNK: i32 = -(256.0 / LIGHT_ATTENUATION_POWER as f64 / (REAL_CHUNK_SIZE as f64)) as i32 + LIGHT_ATTENUATION_CHUNK_START_LEVEL;
 
 pub fn recalculate_natural_light(current_chunk: &Chunk) {
-    for x in 1..CHUNK_SIZE - 1 {
-        for z in 1..CHUNK_SIZE - 1 {
+    for x in 0..CHUNK_SIZE {
+        for z in 0..CHUNK_SIZE {
             cast_natural_light(current_chunk, x, z);
         }
     }
 }
 
 fn no_light_column(current_chunk: &Chunk, x: u32, z: u32) {
+    let mut cubes_lock = current_chunk.cubes.write().unwrap();
     for y in 1..CHUNK_SIZE - 1 {
-        current_chunk.modify_light_at_pos_no_update(
-            LightModification {
-                light_level: MIN_LIGHT_LEVEL,
-                position: ChunkShape::linearize([x, y, z]) as usize,
-            },
-            current_chunk.position,
-        );
+        cubes_lock[ChunkShape::linearize([x, y, z]) as usize].natural_light_level = MIN_LIGHT_LEVEL;
     }
 }
 
@@ -58,21 +52,15 @@ fn cast_natural_light(current_chunk: &Chunk, x: u32, z: u32) {
 
     let sky_height = 32;
     let mut light_level = 255.0;
-    let min_height = current_chunk.position.y * REAL_CHUNK_SIZE as i32 - REAL_CHUNK_SIZE as i32 + 1;
+    let min_height = current_chunk.position.y * REAL_CHUNK_SIZE as i32;
 
     for current_height in (min_height..sky_height).rev() {
         let chunk_position = world_position_to_chunk_position(WorldPosition { x: gx, y: current_height, z: gz });
 
         light_level *= get_light_multiplier_at_world_position(current_chunk, WorldPosition { x: gx, y: current_height, z: gz });
 
-        if chunk_position == current_chunk.position {
-            current_chunk.modify_light_at_pos_no_update(
-                LightModification {
-                    light_level: light_level as u8,
-                    position: ChunkShape::linearize([x, ((current_height).rem_euclid(REAL_CHUNK_SIZE as i32)) as u32 + 1, z]) as usize,
-                },
-                current_chunk.position,
-            );
+        if chunk_position.y == current_chunk.position.y {
+            current_chunk.cubes.write().unwrap()[ChunkShape::linearize([x, ((current_height).rem_euclid(REAL_CHUNK_SIZE as i32)) as u32 + 1, z]) as usize].natural_light_level = light_level as u8;
         } else if light_level <= MIN_LIGHT_LEVEL as f32 {
             return no_light_column(current_chunk, x, z);
         }

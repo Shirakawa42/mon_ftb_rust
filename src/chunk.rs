@@ -6,7 +6,7 @@ use crate::{
     items::{FACES, ITEMS},
     lighting::recalculate_natural_light,
     positions::{ChunkPosition, WorldPosition},
-    structures::{LightModification, Modification},
+    structures::Modification,
     world,
 };
 use bevy::{
@@ -35,7 +35,8 @@ pub type ChunkShape = ConstShape3u32<CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE>;
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Cube {
     pub id: u16,
-    pub light_level: u8,
+    pub natural_light_level: u8,
+    pub items_light_level: u8,
 }
 
 #[derive(Component)]
@@ -50,9 +51,7 @@ pub struct Chunk {
     light_levels: Vec<f32>,
     ambient_occlusion: Vec<f32>,
     pub modifications: RwLock<LinkedHashMap<usize, Modification>>,
-    pub light_modifications: RwLock<Vec<LightModification>>,
     pub other_chunks_modifications: RwLock<LinkedHashMap<(usize, ChunkPosition), (ChunkPosition, Modification)>>,
-    pub other_chunks_light_modifications: RwLock<Vec<(ChunkPosition, LightModification)>>,
     pub filled: Arc<RwLock<bool>>,
     pub drawn: bool,
     gameobject: Option<Entity>,
@@ -62,7 +61,13 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn new(position: ChunkPosition, world: Arc<RwLock<world::World>>) -> Self {
-        let cubes = Arc::new(RwLock::new([Cube { id: 0, light_level: 0 }; (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as usize]));
+        let cubes = Arc::new(RwLock::new(
+            [Cube {
+                id: 0,
+                natural_light_level: 0,
+                items_light_level: 0,
+            }; (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as usize],
+        ));
         let indices = Vec::new();
         let vertices = Vec::new();
         let normals = Vec::new();
@@ -70,9 +75,7 @@ impl Chunk {
         let layers = Vec::new();
         let light_levels = Vec::new();
         let modifications = RwLock::new(LinkedHashMap::new());
-        let light_modifications = RwLock::new(Vec::new());
         let other_chunks_modifications = RwLock::new(LinkedHashMap::new());
-        let other_chunks_light_modifications = RwLock::new(Vec::new());
         let gameobject = None;
 
         Self {
@@ -86,9 +89,7 @@ impl Chunk {
             light_levels,
             ambient_occlusion: Vec::new(),
             modifications,
-            light_modifications,
             other_chunks_modifications,
-            other_chunks_light_modifications,
             filled: Arc::new(RwLock::new(false)),
             drawn: false,
             gameobject,
@@ -129,21 +130,6 @@ impl Chunk {
         }
     }
 
-    pub fn apply_self_light_modifications(&self) {
-        let len = self.light_modifications.read().unwrap().len();
-        if len > 0 {
-            let mut light_mod_lock = self.light_modifications.write().unwrap();
-            let mut cubes_lock = self.cubes.write().unwrap();
-            for _ in 0..len {
-                let light_modifications = light_mod_lock.pop().unwrap();
-                let position = light_modifications.position;
-                if cubes_lock[position].light_level < light_modifications.light_level {
-                    cubes_lock[position].light_level = light_modifications.light_level;
-                }
-            }
-        }
-    }
-
     pub fn modify_other_chunks(&self) {
         let mut modified_chunks: HashSet<ChunkPosition> = HashSet::new();
         let chunks = self.world.read().unwrap().chunks.clone();
@@ -158,18 +144,6 @@ impl Chunk {
             }
             let chunk = chunks.read().unwrap().get(&chunk_position).unwrap().clone();
             chunk.read().unwrap().modifications.write().unwrap().insert(modification.position, modification);
-            modified_chunks.insert(chunk_position);
-        }
-        while self.other_chunks_light_modifications.read().unwrap().len() > 0 {
-            let (chunk_position, modification) = self.other_chunks_light_modifications.write().unwrap().pop().unwrap();
-            {
-                let mut chunks_lock = chunks.write().unwrap();
-                if !chunks_lock.contains_key(&chunk_position) {
-                    chunks_lock.insert(chunk_position, Arc::new(RwLock::new(Chunk::new(chunk_position, self.world.clone()))));
-                }
-            }
-            let chunk = chunks.read().unwrap().get(&chunk_position).unwrap().clone();
-            chunk.read().unwrap().light_modifications.write().unwrap().push(modification);
             modified_chunks.insert(chunk_position);
         }
         let chunks_to_update = self.world.read().unwrap().chunks_to_update.clone();
@@ -279,104 +253,6 @@ impl Chunk {
         }
     }
 
-    fn modify_neighbours_light(&self, chunk_position: ChunkPosition, modification: &LightModification) {
-        let modification_pos = ChunkShape::delinearize(modification.position as u32);
-
-        if modification_pos[0] == 1 {
-            let other_chunk_position = ChunkPosition {
-                x: chunk_position.x - 1,
-                y: chunk_position.y,
-                z: chunk_position.z,
-            };
-            let modification = LightModification {
-                position: ChunkShape::linearize([REAL_CHUNK_SIZE + 1, modification_pos[1], modification_pos[2]]) as usize,
-                light_level: modification.light_level,
-            };
-            if other_chunk_position == self.position {
-                self.light_modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_light_modifications.write().unwrap().push((other_chunk_position, modification));
-            }
-        } else if modification_pos[0] == REAL_CHUNK_SIZE {
-            let other_chunk_position = ChunkPosition {
-                x: chunk_position.x + 1,
-                y: chunk_position.y,
-                z: chunk_position.z,
-            };
-            let modification = LightModification {
-                position: ChunkShape::linearize([0, modification_pos[1], modification_pos[2]]) as usize,
-                light_level: modification.light_level,
-            };
-            if other_chunk_position == self.position {
-                self.light_modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_light_modifications.write().unwrap().push((other_chunk_position, modification));
-            }
-        }
-        if modification_pos[1] == 1 {
-            let other_chunk_position = ChunkPosition {
-                x: chunk_position.x,
-                y: chunk_position.y - 1,
-                z: chunk_position.z,
-            };
-            let modification = LightModification {
-                position: ChunkShape::linearize([modification_pos[0], REAL_CHUNK_SIZE + 1, modification_pos[2]]) as usize,
-                light_level: modification.light_level,
-            };
-            if other_chunk_position == self.position {
-                self.light_modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_light_modifications.write().unwrap().push((other_chunk_position, modification));
-            }
-        } else if modification_pos[1] == REAL_CHUNK_SIZE {
-            let other_chunk_position = ChunkPosition {
-                x: chunk_position.x,
-                y: chunk_position.y + 1,
-                z: chunk_position.z,
-            };
-            let modification = LightModification {
-                position: ChunkShape::linearize([modification_pos[0], 0, modification_pos[2]]) as usize,
-                light_level: modification.light_level,
-            };
-            if other_chunk_position == self.position {
-                self.light_modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_light_modifications.write().unwrap().push((other_chunk_position, modification));
-            }
-        }
-        if modification_pos[2] == 1 {
-            let other_chunk_position = ChunkPosition {
-                x: chunk_position.x,
-                y: chunk_position.y,
-                z: chunk_position.z - 1,
-            };
-            let modification = LightModification {
-                position: ChunkShape::linearize([modification_pos[0], modification_pos[1], REAL_CHUNK_SIZE + 1]) as usize,
-                light_level: modification.light_level,
-            };
-            if other_chunk_position == self.position {
-                self.light_modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_light_modifications.write().unwrap().push((other_chunk_position, modification));
-            }
-        } else if modification_pos[2] == REAL_CHUNK_SIZE {
-            let other_chunk_position = ChunkPosition {
-                x: chunk_position.x,
-                y: chunk_position.y,
-                z: chunk_position.z + 1,
-            };
-            let modification = LightModification {
-                position: ChunkShape::linearize([modification_pos[0], modification_pos[1], 0]) as usize,
-                light_level: modification.light_level,
-            };
-            if other_chunk_position == self.position {
-                self.light_modifications.write().unwrap().insert(modification.position, modification);
-            } else {
-                self.other_chunks_light_modifications.write().unwrap().push((other_chunk_position, modification));
-            }
-        }
-    }
-
     pub fn add_modification_no_update(&self, modification: Modification, chunk_position: ChunkPosition) {
         if chunk_position == self.position {
             let exist = self.modifications.read().unwrap().contains_key(&modification.position);
@@ -394,15 +270,6 @@ impl Chunk {
                 self.modify_neighbours(chunk_position, &modification);
                 self.other_chunks_modifications.write().unwrap().insert((modification.position, chunk_position), (chunk_position, modification));
             }
-        }
-    }
-
-    pub fn modify_light_at_pos_no_update(&self, modification: LightModification, chunk_position: ChunkPosition) {
-        self.modify_neighbours_light(chunk_position, &modification);
-        if chunk_position == self.position {
-            self.light_modifications.write().unwrap().push(modification);
-        } else {
-            self.other_chunks_light_modifications.write().unwrap().push((chunk_position, modification));
         }
     }
 
@@ -460,7 +327,7 @@ impl Chunk {
                     (quad.minimum[1] as i8 + FACES[i][1]) as u32,
                     (quad.minimum[2] as i8 + FACES[i][2]) as u32,
                 ]) as usize]
-                    .light_level as f32
+                    .natural_light_level as f32
                     / 255.0;
                 self.light_levels.extend_from_slice(&[light_level, light_level, light_level, light_level]);
                 let ao = *&face.quad_mesh_ao(&quad);
@@ -474,7 +341,6 @@ impl Chunk {
 
     pub fn update_mesh(&mut self) {
         self.apply_self_modifications();
-        self.apply_self_light_modifications();
 
         self.greedy_meshing();
         self.drawn = true;

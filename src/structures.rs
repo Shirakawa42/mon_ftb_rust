@@ -12,12 +12,6 @@ pub struct Modification {
     pub position: usize,
 }
 
-#[derive(Clone)]
-pub struct LightModification {
-    pub light_level: u8,
-    pub position: usize,
-}
-
 pub fn add_modification(modification: Modification, world_position: WorldPosition, current_chunk: &Chunk) {
     let chunk_position = world_position_to_chunk_position(world_position);
 

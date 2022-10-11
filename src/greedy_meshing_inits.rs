@@ -23,6 +23,6 @@ impl MergeVoxel for Cube {
     }
 
     fn merge_value_facing_neighbour(&self) -> Self::MergeValueFacingNeighbour {
-        self.light_level
+        self.natural_light_level + self.items_light_level
     }
 }
