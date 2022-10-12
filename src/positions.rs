@@ -16,21 +16,15 @@ pub fn world_position_to_position_in_chunk(world_position: WorldPosition) -> [u3
     ]
 }
 
+pub fn to_world_position(value: u32, chunk_position_axis: i32) -> i32 {
+    value as i32 - 1 + chunk_position_axis * REAL_CHUNK_SIZE as i32
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ChunkPosition {
     pub x: i32,
     pub y: i32,
     pub z: i32,
-}
-
-impl ChunkPosition {
-//    pub fn add_array(&self, array: [i32; 3]) -> ChunkPosition {
-//        ChunkPosition {
-//            x: self.x + array[0],
-//            y: self.y + array[1],
-//            z: self.z + array[2],
-//        }
-//    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -23,6 +23,7 @@ pub struct World {
     pub world_thread_pool: rayon::ThreadPool,
     pub chunk_filling: Arc<RwLock<chunk_filling::ChunkFilling>>,
     pub nb_chunks_generating: Arc<RwLock<usize>>,
+    pub natural_light_stopped_at: RwLock<HashMap<(i32, i32), i32>>, // key: (gx, gz), value: gy -> the highest y where the light_multiplier is not 0
 }
 
 impl World {
@@ -46,6 +47,7 @@ impl World {
             world_thread_pool,
             chunk_filling,
             nb_chunks_generating: Arc::new(RwLock::new(0)),
+            natural_light_stopped_at: RwLock::new(HashMap::new()),
         }
     }
 

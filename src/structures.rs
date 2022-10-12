@@ -19,7 +19,7 @@ pub fn add_modification(modification: Modification, world_position: WorldPositio
 }
 
 pub fn generate_tree(world_position: WorldPosition, current_chunk: &Chunk) {
-    for i in 0..6 {
+    for i in 0..5 {
         add_modification(
             Modification {
                 id: Items::Wood as u16,

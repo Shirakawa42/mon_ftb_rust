@@ -62,7 +62,7 @@ pub const ITEMS: [Item; 8] = [
         is_transparent: true,
         is_solid: true,
         textures: [16, 16, 16, 16, 16, 16],
-        light_multiplier: 0.8,
+        light_multiplier: 0.7,
     },
     Item {
         name: "Sand",
