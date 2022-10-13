@@ -59,6 +59,7 @@ pub struct Chunk {
     gameobject: Option<Entity>,
     pub world: Arc<RwLock<world::World>>,
     pub update_count: u32,
+    pub chunk_filling: ChunkFilling,
 }
 
 impl Chunk {
@@ -99,10 +100,11 @@ impl Chunk {
             gameobject,
             world,
             update_count: 0,
+            chunk_filling: ChunkFilling::new(),
         }
     }
 
-    pub fn fill_chunk(&self, chunk_filling: Arc<RwLock<ChunkFilling>>) {
+    pub fn fill_chunk(&self) {
         let mut chunk_heights = [0; (CHUNK_SIZE * CHUNK_SIZE) as usize];
         for i in 0..CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE {
             let [x, y, z] = ChunkShape::delinearize(i);
@@ -111,7 +113,7 @@ impl Chunk {
                 y: (y as i32 - 1) + (REAL_CHUNK_SIZE as i32 * self.position.y) as i32,
                 z: (z as i32 - 1) + (REAL_CHUNK_SIZE as i32 * self.position.z) as i32,
             };
-            let cube = chunk_filling.read().unwrap().fill_block(world_position, self, true);
+            let cube = self.chunk_filling.fill_block(world_position, self, true);
             if y > chunk_heights[(x + z * CHUNK_SIZE) as usize] {
                 chunk_heights[(x + z * CHUNK_SIZE) as usize] = y;
             }
@@ -432,9 +434,9 @@ impl Chunk {
         self.greedy_meshing();
         self.drawn = true;
 
-        //self.update_count += 1;
-        //if self.update_count > 1 {
-        //    println!("Chunk {} {} {} updated {} times", self.position.x, self.position.y, self.position.z, self.update_count);
-        //}
+        self.update_count += 1;
+        if self.update_count > 1 {
+            println!("Chunk {} {} {} updated {} times", self.position.x, self.position.y, self.position.z, self.update_count);
+        }
     }
 }

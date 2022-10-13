@@ -5,12 +5,11 @@ use bevy::utils::HashMap;
 use linked_hash_set::LinkedHashSet;
 
 use crate::chunk::Chunk;
-use crate::chunk_filling;
 use crate::game_material::GameMaterial;
 use crate::positions::ChunkPosition;
 
-const NB_THREADS: usize = 1;
-const NB_UPDATE_THREADS: usize = 1;
+const NB_THREADS: usize = 8;
+const NB_UPDATE_THREADS: usize = 4;
 
 #[derive(Component)]
 pub struct World {
@@ -21,7 +20,6 @@ pub struct World {
     pub thread_pool: rayon::ThreadPool,
     pub update_thread_pool: rayon::ThreadPool,
     pub world_thread_pool: rayon::ThreadPool,
-    pub chunk_filling: Arc<RwLock<chunk_filling::ChunkFilling>>,
     pub nb_chunks_generating: Arc<RwLock<usize>>,
     pub natural_light_stopped_at: RwLock<HashMap<(i32, i32), i32>>, // key: (gx, gz), value: gy -> the highest y where the light_multiplier is not 0
 }
@@ -35,7 +33,6 @@ impl World {
         let thread_pool = rayon::ThreadPoolBuilder::new().num_threads(NB_THREADS).build().unwrap();
         let update_thread_pool = rayon::ThreadPoolBuilder::new().num_threads(NB_UPDATE_THREADS).build().unwrap();
         let world_thread_pool = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap();
-        let chunk_filling = Arc::new(RwLock::new(chunk_filling::ChunkFilling::new()));
 
         Self {
             chunks,
@@ -45,7 +42,6 @@ impl World {
             thread_pool,
             update_thread_pool,
             world_thread_pool,
-            chunk_filling,
             nb_chunks_generating: Arc::new(RwLock::new(0)),
             natural_light_stopped_at: RwLock::new(HashMap::new()),
         }
@@ -92,13 +88,12 @@ impl World {
                         continue;
                     }
                     let chunks_to_draw = Arc::clone(&self.chunks_to_draw);
-                    let chunk_filling = self.chunk_filling.clone();
                     let nb_chunks_generating = self.nb_chunks_generating.clone();
                     *self.nb_chunks_generating.write().unwrap() += 1;
 
                     self.thread_pool.spawn(move || {
                         if !*chunk.read().unwrap().filled.read().unwrap() {
-                            chunk.read().unwrap().fill_chunk(chunk_filling);
+                            chunk.read().unwrap().fill_chunk();
                             chunk.read().unwrap().modify_other_chunks();
                         }
                         chunk.write().unwrap().update_mesh();

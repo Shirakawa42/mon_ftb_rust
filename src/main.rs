@@ -7,6 +7,7 @@ mod lighting;
 mod positions;
 mod structures;
 mod world;
+mod events;
 
 use std::{
     sync::{Arc, RwLock},
@@ -25,8 +26,8 @@ use bevy::{
     },
     window::PresentMode,
 };
-use bevy_flycam::PlayerPlugin;
 use bevy_inspector_egui::WorldInspectorPlugin;
+use events::{handle_keyboard, handle_mouse_motion, GameCamera};
 use game_material::GameMaterial;
 
 const WIDTH: f32 = 1920.0;
@@ -51,6 +52,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut wireframe_c
         handle: asset_server.load("Textures/BlockAtlas.png"),
     });
     commands.insert_resource(Instant::now());
+
+    commands.spawn_bundle(Camera3dBundle {
+        transform: Transform::from_xyz(0.0, 50.0, 0.0),
+        ..Default::default()
+    }).insert(GameCamera::default());
 }
 
 fn create_material(mut images: ResMut<Assets<Image>>, world: ResMut<Arc<RwLock<world::World>>>, mut materials: ResMut<Assets<GameMaterial>>, mut loading_texture: ResMut<LoadingTexture>, asset_server: Res<AssetServer>) {
@@ -120,6 +126,8 @@ fn main() {
             title: "FTB".to_string(),
             resizable: false,
             present_mode: PresentMode::Immediate,
+            cursor_visible: false,
+            cursor_locked: true,
             ..Default::default()
         })
         .add_startup_system(setup)
@@ -127,10 +135,11 @@ fn main() {
         .add_system(draw_chunks_to_draw)
         .add_system(update_chunks_to_update)
         .add_system(force_update_all_chunks)
+        .add_system(handle_keyboard)
+        .add_system(handle_mouse_motion)
         .add_plugins(DefaultPlugins)
         .add_plugin(MaterialPlugin::<GameMaterial>::default())
         .add_plugin(WorldInspectorPlugin::new())
-        .add_plugin(PlayerPlugin)
         .add_plugin(LogDiagnosticsPlugin::default())
         //.add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_plugin(WireframePlugin::default())
